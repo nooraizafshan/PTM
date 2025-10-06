@@ -1124,6 +1124,7 @@ $upcoming_events = [
         }
 
         // Geolocation for transport tracking
+
         function trackBusLocation() {
             if ('geolocation' in navigator) {
                 navigator.geolocation.getCurrentPosition(
@@ -1144,7 +1145,6 @@ $upcoming_events = [
         if (window.location.pathname.includes('transport')) {
             trackBusLocation();
         }
-
         // Custom context menu for quick actions
         document.addEventListener('contextmenu', function(e) {
             if (e.target.closest('.action-card')) {
@@ -1168,7 +1168,6 @@ $upcoming_events = [
                     </div>
                 `;
                 document.body.appendChild(contextMenu);
-                
                 // Remove context menu when clicking elsewhere
                 setTimeout(() => {
                     document.addEventListener('click', function removeMenu() {
@@ -1178,7 +1177,6 @@ $upcoming_events = [
                 }, 100);
             }
         });
-
         // Enhanced search functionality
         function initializeSearch() {
             const searchInput = document.createElement('input');
@@ -1198,7 +1196,6 @@ $upcoming_events = [
                 display: none;
             `;
             document.body.appendChild(searchInput);
-
             // Show search with Ctrl/Cmd + K
             document.addEventListener('keydown', function(e) {
                 if ((e.ctrlKey || e.metaKey) && e.key === 'k') {

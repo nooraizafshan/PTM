@@ -1,7 +1,5 @@
 <?php
 // config/db.php
-
-// Database configuration
 $db_config = [
     'host' => 'localhost',
     'username' => 'root',
