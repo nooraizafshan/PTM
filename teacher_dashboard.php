@@ -12,7 +12,7 @@ $page = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
 
 // Page mapping
 $pages = [
-    'dashboard' => '../dashboard/teacher_dashboard.php',
+    'dashboard' => 'modules/teacher/dashboard.php',
     'students' => 'modules/teacher/students.php',
     'mark-attendance' => 'modules/attendance/mark_attendance.php',
     'view-attendance' => 'modules/attendance/view_attendance.php',
@@ -20,7 +20,6 @@ $pages = [
     'meetings' => 'modules/meetings/schedule_meeting.php',
     'feedback' => 'modules/feedback/feedback.php',
     'transport' => 'modules/transport/transport.php',
-    'profile' => 'modules/teacher/profile.php'
 ];
 
 // Get current page file

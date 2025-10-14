@@ -3,16 +3,15 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 session_start();
-
 require_once __DIR__ . '/../../config/db.php';
+$conn = dbConnect(); // ✅ create DB connection
 
-$site_title = "Parent Signup - EduConnect";
-
+$site_title = "Sign Up - EduConnect";
 $error_message = '';
 $success_message = '';
 $form_data = [];
 
-// Generate CSRF token if not exists
+// Generate CSRF token
 if (!isset($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
@@ -23,75 +22,99 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) {
         $error_message = 'Security token mismatch. Please try again.';
     } else {
-        // Sanitize and validate input
+        // Get role
+        $role = $_POST['role'] ?? '';
+        
+        // Common fields
         $form_data = [
+            'role' => $role,
             'first_name' => trim($_POST['first_name'] ?? ''),
             'last_name' => trim($_POST['last_name'] ?? ''),
             'email' => filter_var($_POST['email'] ?? '', FILTER_SANITIZE_EMAIL),
             'phone' => trim($_POST['phone'] ?? ''),
             'password' => $_POST['password'] ?? '',
             'confirm_password' => $_POST['confirm_password'] ?? '',
-            'child_name' => trim($_POST['child_name'] ?? ''),
-            'child_grade' => trim($_POST['child_grade'] ?? ''),
             'terms' => isset($_POST['terms'])
         ];
         
+        // Role-specific fields
+        if ($role === 'parent') {
+            $form_data['child_name'] = trim($_POST['child_name'] ?? '');
+            $form_data['child_grade'] = trim($_POST['child_grade'] ?? '');
+        } elseif ($role === 'teacher') {
+            $form_data['subject'] = trim($_POST['subject'] ?? '');
+            $form_data['department'] = trim($_POST['department'] ?? '');
+        }
+        
         // Validation
         $errors = [];
-        
+
+        if (empty($role) || !in_array($role, ['parent', 'teacher'])) {
+            $errors[] = 'Please select a valid role.';
+        }
+
         if (empty($form_data['first_name'])) {
             $errors[] = 'First name is required.';
         }
-        
+
         if (empty($form_data['last_name'])) {
             $errors[] = 'Last name is required.';
         }
-        
+
         if (empty($form_data['email']) || !filter_var($form_data['email'], FILTER_VALIDATE_EMAIL)) {
             $errors[] = 'Please enter a valid email address.';
         }
-        
+
         if (empty($form_data['phone']) || !preg_match('/^[\+]?[0-9\s\-\(\)]+$/', $form_data['phone'])) {
             $errors[] = 'Please enter a valid phone number.';
         }
-        
+
         if (empty($form_data['password'])) {
             $errors[] = 'Password is required.';
         } elseif (strlen($form_data['password']) < 8) {
             $errors[] = 'Password must be at least 8 characters long.';
-        } elseif (!preg_match('/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/', $form_data['password'])) {
-            $errors[] = 'Password must contain at least one uppercase letter, one lowercase letter, and one number.';
         }
-        
+
         if ($form_data['password'] !== $form_data['confirm_password']) {
             $errors[] = 'Passwords do not match.';
         }
-        
-        if (empty($form_data['child_name'])) {
-            $errors[] = 'Child name is required.';
+
+        // Role-specific validation
+        if ($role === 'parent') {
+            if (empty($form_data['child_name'])) {
+                $errors[] = 'Child name is required.';
+            }
+            if (empty($form_data['child_grade'])) {
+                $errors[] = 'Child grade is required.';
+            }
+        } elseif ($role === 'teacher') {
+            if (empty($form_data['subject'])) {
+                $errors[] = 'Subject is required.';
+            }
+            if (empty($form_data['department'])) {
+                $errors[] = 'Department is required.';
+            }
         }
-        
-        if (empty($form_data['child_grade'])) {
-            $errors[] = 'Child grade is required.';
-        }
-        
+
         if (!$form_data['terms']) {
             $errors[] = 'Please accept the terms and conditions.';
         }
-        
+
         // Check if email already exists
         if (empty($errors) && emailExists($form_data['email'])) {
             $errors[] = 'An account with this email already exists.';
         }
-        
+
         if (!empty($errors)) {
             $error_message = implode('<br>', $errors);
         } else {
             // Create user account
             if (createUser($form_data)) {
-                $success_message = 'Account created successfully! Please check your email to verify your account.';
-                // Clear form data on success
+                $success_message = 'Account created successfully! Redirecting to login...';
+                // Clear form data
                 $form_data = [];
+                // Redirect after 2 seconds
+                header("refresh:2;url=login.php");
             } else {
                 $error_message = 'An error occurred while creating your account. Please try again.';
             }
@@ -99,44 +122,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+/* -------------------------
+   FUNCTIONS
+------------------------- */
 
 function emailExists($email) {
-    $conn = dbConnect();
-    $stmt = $conn->prepare("SELECT id FROM parents WHERE email = ?");
+    global $conn;
+    $stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
     $stmt->bind_param("s", $email);
     $stmt->execute();
     $stmt->store_result();
     $exists = $stmt->num_rows > 0;
     $stmt->close();
-    $conn->close();
     return $exists;
 }
 
 function createUser($data) {
-    $conn = dbConnect();
-    $stmt = $conn->prepare("INSERT INTO parents (first_name, last_name, email, phone, password, child_name, child_grade) 
-                            VALUES (?, ?, ?, ?, ?, ?, ?)");
-    $hashedPassword = password_hash($data['password'], PASSWORD_DEFAULT);
-    $stmt->bind_param("sssssss", $data['first_name'], $data['last_name'], $data['email'], $data['phone'], $hashedPassword, $data['child_name'], $data['child_grade']);
+    global $conn;
     
-    $success = $stmt->execute();
-    if (!$success) {
-        die("Query failed: " . $stmt->error);
+    // Start transaction
+    $conn->begin_transaction();
+    
+    try {
+        // Insert into users table
+        $stmt = $conn->prepare("INSERT INTO users (name, email, password, role, contact, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
+        $full_name = $data['first_name'] . ' ' . $data['last_name'];
+        $hashedPassword = password_hash($data['password'], PASSWORD_DEFAULT);
+        $stmt->bind_param("sssss", $full_name, $data['email'], $hashedPassword, $data['role'], $data['phone']);
+        
+        if (!$stmt->execute()) {
+            throw new Exception("Failed to insert into users: " . $stmt->error);
+        }
+
+        $user_id = $conn->insert_id;
+        $stmt->close();
+
+        // Insert role-specific data
+        if ($data['role'] === 'parent') {
+            $stmt = $conn->prepare("INSERT INTO parents (user_id, student_name, student_grade) VALUES (?, ?, ?)");
+            $stmt->bind_param("iss", $user_id, $data['child_name'], $data['child_grade']);
+        } else {
+            $stmt = $conn->prepare("INSERT INTO teachers (user_id, subject, department) VALUES (?, ?, ?)");
+            $stmt->bind_param("iss", $user_id, $data['subject'], $data['department']);
+        }
+
+        if (!$stmt->execute()) {
+            throw new Exception("Failed to insert role data: " . $stmt->error);
+        }
+
+        $stmt->close();
+        $conn->commit();
+        return true;
+        
+    } catch (Exception $e) {
+        $conn->rollback();
+        error_log($e->getMessage());
+        return false;
     }
-    
-    $stmt->close();
-    $conn->close();
-    return $success;
 }
 
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($site_title); ?></title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * {
             margin: 0;
@@ -158,7 +211,7 @@ function createUser($data) {
             display: flex;
             background: white;
             border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
             overflow: hidden;
             max-width: 1000px;
             width: 100%;
@@ -178,55 +231,56 @@ function createUser($data) {
             text-align: center;
         }
 
-        .welcome-illustration {
+        .illustration {
             width: 180px;
             height: 180px;
-            background: #f8f9fa;
-            border-radius: 15px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
             margin-bottom: 30px;
             display: flex;
             align-items: center;
             justify-content: center;
-            position: relative;
-            overflow: hidden;
         }
 
-        .family-icon {
+        .illustration i {
             font-size: 80px;
-            color: #00b894;
+            color: white;
+            opacity: 0.9;
         }
 
         .signup-left h2 {
             font-size: 28px;
             font-weight: 700;
             margin-bottom: 15px;
-            line-height: 1.2;
+            line-height: 1.3;
         }
 
         .signup-left p {
-            font-size: 16px;
+            font-size: 15px;
             margin-bottom: 30px;
-            opacity: 0.9;
-            line-height: 1.4;
+            opacity: 0.95;
+            line-height: 1.6;
         }
 
         .benefits {
             list-style: none;
             text-align: left;
+            width: 100%;
         }
 
         .benefits li {
             display: flex;
             align-items: center;
             margin-bottom: 15px;
-            font-size: 15px;
+            font-size: 14px;
+            background: rgba(255, 255, 255, 0.15);
+            padding: 12px 15px;
+            border-radius: 8px;
         }
 
         .benefits li i {
-            margin-right: 15px;
-            width: 20px;
+            margin-right: 12px;
             font-size: 16px;
-            color: #f2f4f6ff;
         }
 
         .signup-right {
@@ -239,24 +293,29 @@ function createUser($data) {
             max-height: 700px;
         }
 
-        .user-plus-icon {
-            width: 50px;
-            height: 50px;
-            background: #00b894;
+        .logo-header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        .logo-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #00b894, #00cec9);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin: 0 auto 20px;
+            margin: 0 auto 15px;
         }
 
-        .user-plus-icon i {
+        .logo-icon i {
             color: white;
-            font-size: 20px;
+            font-size: 28px;
         }
 
         .signup-right h3 {
-            font-size: 24px;
+            font-size: 26px;
             font-weight: 700;
             text-align: center;
             margin-bottom: 8px;
@@ -275,7 +334,9 @@ function createUser($data) {
             border-radius: 8px;
             margin-bottom: 20px;
             font-size: 14px;
-            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         .alert-error {
@@ -301,15 +362,11 @@ function createUser($data) {
             flex: 1;
         }
 
-        .form-group.full-width {
-            flex: 1 1 100%;
-        }
-
         .form-group label {
             display: block;
             margin-bottom: 8px;
             color: #2d3436;
-            font-weight: 500;
+            font-weight: 600;
             font-size: 14px;
         }
 
@@ -330,31 +387,29 @@ function createUser($data) {
             font-size: 14px;
         }
 
-        .form-control {
+        .form-control, .form-select {
             width: 100%;
             padding: 12px 12px 12px 40px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
             font-size: 14px;
             transition: all 0.3s ease;
             background: #f8f9fa;
         }
 
-        .form-control:focus {
+        .form-select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23636e72' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 15px center;
+        }
+
+        .form-control:focus, .form-select:focus {
             outline: none;
             border-color: #00b894;
             background: white;
             box-shadow: 0 0 0 3px rgba(0, 184, 148, 0.1);
-        }
-
-        .form-control.error {
-            border-color: #e74c3c;
-            background: #ffeaea;
-        }
-
-        select.form-control {
-            padding-left: 40px;
-            cursor: pointer;
         }
 
         .password-wrapper {
@@ -369,16 +424,12 @@ function createUser($data) {
             color: #b2bec3;
             cursor: pointer;
             font-size: 16px;
+            z-index: 10;
         }
 
-        .password-strength {
-            margin-top: 8px;
-            font-size: 12px;
+        .password-toggle:hover {
+            color: #00b894;
         }
-
-        .strength-weak { color: #e74c3c; }
-        .strength-medium { color: #f39c12; }
-        .strength-strong { color: #27ae60; }
 
         .checkbox-group {
             display: flex;
@@ -389,7 +440,10 @@ function createUser($data) {
         .checkbox-group input[type="checkbox"] {
             margin-right: 10px;
             margin-top: 2px;
+            width: 18px;
+            height: 18px;
             accent-color: #00b894;
+            cursor: pointer;
         }
 
         .checkbox-group label {
@@ -397,10 +451,11 @@ function createUser($data) {
             color: #636e72;
             line-height: 1.4;
             margin: 0;
+            cursor: pointer;
         }
 
         .checkbox-group a {
-            color: #74b9ff;
+            color: #00b894;
             text-decoration: none;
         }
 
@@ -412,7 +467,7 @@ function createUser($data) {
             width: 100%;
             padding: 15px;
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
@@ -429,71 +484,25 @@ function createUser($data) {
         }
 
         .btn-primary {
-            background: #00b894;
+            background: linear-gradient(135deg, #00b894, #00cec9);
             color: white;
             margin-bottom: 20px;
         }
 
         .btn-primary:hover:not(:disabled) {
-            background: #00a085;
-            transform: translateY(-1px);
-            box-shadow: 0 5px 15px rgba(0, 184, 148, 0.3);
-        }
-
-        .divider {
-            text-align: center;
-            margin: 20px 0;
-            position: relative;
-            color: #b2bec3;
-            font-size: 14px;
-        }
-
-        .divider::before {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: #e9ecef;
-            z-index: 1;
-        }
-
-        .divider span {
-            background: white;
-            padding: 0 15px;
-            position: relative;
-            z-index: 2;
-        }
-
-        .btn-google {
-            background: white;
-            color: #636e72;
-            border: 1px solid #ddd;
-            margin-bottom: 20px;
-        }
-
-        .btn-google:hover {
-            background: #f8f9fa;
-            transform: translateY(-1px);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-        }
-
-        .google-icon {
-            width: 18px;
-            height: 18px;
-            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="%234285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="%2334A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="%23FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="%23EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>') no-repeat center;
-            background-size: contain;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 184, 148, 0.4);
         }
 
         .login-link {
             text-align: center;
             font-size: 14px;
             color: #636e72;
+            margin-top: 15px;
         }
 
         .login-link a {
-            color: #74b9ff;
+            color: #00b894;
             text-decoration: none;
             font-weight: 600;
         }
@@ -502,10 +511,36 @@ function createUser($data) {
             text-decoration: underline;
         }
 
+        .back-home {
+            text-align: center;
+            margin-top: 15px;
+        }
+
+        .back-home a {
+            color: #636e72;
+            text-decoration: none;
+            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .back-home a:hover {
+            color: #00b894;
+        }
+
+        /* Dynamic fields display */
+        .dynamic-fields {
+            display: none;
+        }
+
+        .dynamic-fields.active {
+            display: block;
+        }
+
         @media (max-width: 768px) {
             .signup-container {
                 flex-direction: column;
-                margin: 10px;
             }
             
             .signup-left, .signup-right {
@@ -526,50 +561,65 @@ function createUser($data) {
 </head>
 <body>
     <div class="signup-container">
-        <!-- Left side -->
+        <!-- Left Side -->
         <div class="signup-left">
-            <div class="welcome-illustration">
-                <i class="fas fa-users family-icon"></i>
+            <div class="illustration">
+                <i class="fas fa-users-cog" id="leftIcon"></i>
             </div>
             
-            <h2>Join Our Community!</h2>
-            <p>Create your parent account to start connecting with your child's education and become part of our learning community.</p>
+            <h2 id="leftTitle">Join Our Community!</h2>
+            <p id="leftDesc">Create your account to connect with our educational platform</p>
             
             <ul class="benefits">
-                <li><i class="fas fa-graduation-cap"></i> Track academic progress</li>
-                <li><i class="fas fa-calendar-alt"></i> Access school calendar</li>
-                <li><i class="fas fa-comments"></i> Teacher communication</li>
-                <li><i class="fas fa-bell"></i> Real-time notifications</li>
-                <li><i class="fas fa-shield-alt"></i> Secure & private</li>
+                <li><i class="fas fa-chart-line"></i> Track progress in real-time</li>
+                <li><i class="fas fa-calendar-check"></i> Easy scheduling & management</li>
+                <li><i class="fas fa-comments"></i> Seamless communication</li>
+                <li><i class="fas fa-bell"></i> Instant notifications</li>
+                <li><i class="fas fa-shield-alt"></i> Secure & private platform</li>
             </ul>
         </div>
 
-        <!-- Right side -->
+        <!-- Right Side -->
         <div class="signup-right">
-            <div class="user-plus-icon">
-                <i class="fas fa-user-plus"></i>
+            <div class="logo-header">
+                <div class="logo-icon">
+                    <i class="fas fa-graduation-cap"></i>
+                </div>
+                <h3>Create Your Account</h3>
+                <p class="subtitle">Fill in your details to get started</p>
             </div>
-            
-            <h3>Create Parent Account</h3>
-            <p class="subtitle">Fill in your details to get started</p>
             
             <?php if ($error_message): ?>
                 <div class="alert alert-error">
-                    <i class="fas fa-exclamation-circle"></i> <?php echo $error_message; ?>
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span><?php echo $error_message; ?></span>
                 </div>
             <?php endif; ?>
             
             <?php if ($success_message): ?>
                 <div class="alert alert-success">
-                    <i class="fas fa-check-circle"></i> <?php echo htmlspecialchars($success_message); ?>
+                    <i class="fas fa-check-circle"></i>
+                    <span><?php echo htmlspecialchars($success_message); ?></span>
                 </div>
             <?php endif; ?>
             
-            <form method="POST" action="<?php echo htmlspecialchars($_SERVER['PHP_SELF']); ?>" id="signupForm">
-                <!-- CSRF Protection -->
+            <form method="POST" action="" id="signupForm">
                 <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
                 
-                <!-- Parent Information -->
+                <!-- Role Selection -->
+                <div class="form-group">
+                    <label for="role"><i class="fas fa-user-tag"></i> Sign Up As <span class="required">*</span></label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-user-circle"></i>
+                        <select class="form-select" name="role" id="role" required>
+                            <option value="">-- Select Your Role --</option>
+                            <option value="parent" <?php echo ($form_data['role'] ?? '') === 'parent' ? 'selected' : ''; ?>>Parent</option>
+                            <option value="teacher" <?php echo ($form_data['role'] ?? '') === 'teacher' ? 'selected' : ''; ?>>Teacher</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Common Fields -->
                 <div class="form-row">
                     <div class="form-group">
                         <label for="first_name">First Name <span class="required">*</span></label>
@@ -638,9 +688,8 @@ function createUser($data) {
                                    class="form-control" 
                                    placeholder="Create password"
                                    required>
-                            <i class="fas fa-eye password-toggle" onclick="togglePassword('password')"></i>
+                            <i class="fas fa-eye password-toggle" id="togglePassword1"></i>
                         </div>
-                        <div class="password-strength" id="passwordStrength"></div>
                     </div>
                     <div class="form-group">
                         <label for="confirm_password">Confirm Password <span class="required">*</span></label>
@@ -652,55 +701,91 @@ function createUser($data) {
                                    class="form-control" 
                                    placeholder="Confirm password"
                                    required>
-                            <i class="fas fa-eye password-toggle" onclick="togglePassword('confirm_password')"></i>
+                            <i class="fas fa-eye password-toggle" id="togglePassword2"></i>
                         </div>
                     </div>
                 </div>
 
-                <!-- Child Information -->
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="child_name">Child Name <span class="required">*</span></label>
-                        <div class="input-wrapper">
-                            <i class="fas fa-child"></i>
-                            <input type="text" 
-                                   id="child_name" 
-                                   name="child_name" 
-                                   class="form-control" 
-                                   placeholder="Enter child's name"
-                                   value="<?php echo htmlspecialchars($form_data['child_name'] ?? ''); ?>"
-                                   required>
+                <!-- Parent-specific Fields -->
+                <div class="dynamic-fields" id="parentFields">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="child_name">Child Name <span class="required">*</span></label>
+                            <div class="input-wrapper">
+                                <i class="fas fa-child"></i>
+                                <input type="text" 
+                                       id="child_name" 
+                                       name="child_name" 
+                                       class="form-control" 
+                                       placeholder="Enter child's name"
+                                       value="<?php echo htmlspecialchars($form_data['child_name'] ?? ''); ?>">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="child_grade">Grade/Class <span class="required">*</span></label>
+                            <div class="input-wrapper">
+                                <i class="fas fa-graduation-cap"></i>
+                                <select id="child_grade" name="child_grade" class="form-control">
+                                    <option value="">Select grade</option>
+                                    <option value="kindergarten">Kindergarten</option>
+                                    <option value="grade-1">Grade 1</option>
+                                    <option value="grade-2">Grade 2</option>
+                                    <option value="grade-3">Grade 3</option>
+                                    <option value="grade-4">Grade 4</option>
+                                    <option value="grade-5">Grade 5</option>
+                                    <option value="grade-6">Grade 6</option>
+                                    <option value="grade-7">Grade 7</option>
+                                    <option value="grade-8">Grade 8</option>
+                                    <option value="grade-9">Grade 9</option>
+                                    <option value="grade-10">Grade 10</option>
+                                    <option value="grade-11">Grade 11</option>
+                                    <option value="grade-12">Grade 12</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label for="child_grade">Grade/Class <span class="required">*</span></label>
-                        <div class="input-wrapper">
-                            <i class="fas fa-graduation-cap"></i>
-                            <select id="child_grade" name="child_grade" class="form-control" required>
-                                <option value="">Select grade</option>
-                                <option value="kindergarten" <?php echo ($form_data['child_grade'] ?? '') === 'kindergarten' ? 'selected' : ''; ?>>Kindergarten</option>
-                                <option value="grade-1" <?php echo ($form_data['child_grade'] ?? '') === 'grade-1' ? 'selected' : ''; ?>>Grade 1</option>
-                                <option value="grade-2" <?php echo ($form_data['child_grade'] ?? '') === 'grade-2' ? 'selected' : ''; ?>>Grade 2</option>
-                                <option value="grade-3" <?php echo ($form_data['child_grade'] ?? '') === 'grade-3' ? 'selected' : ''; ?>>Grade 3</option>
-                                <option value="grade-4" <?php echo ($form_data['child_grade'] ?? '') === 'grade-4' ? 'selected' : ''; ?>>Grade 4</option>
-                                <option value="grade-5" <?php echo ($form_data['child_grade'] ?? '') === 'grade-5' ? 'selected' : ''; ?>>Grade 5</option>
-                                <option value="grade-6" <?php echo ($form_data['child_grade'] ?? '') === 'grade-6' ? 'selected' : ''; ?>>Grade 6</option>
-                                <option value="grade-7" <?php echo ($form_data['child_grade'] ?? '') === 'grade-7' ? 'selected' : ''; ?>>Grade 7</option>
-                                <option value="grade-8" <?php echo ($form_data['child_grade'] ?? '') === 'grade-8' ? 'selected' : ''; ?>>Grade 8</option>
-                                <option value="grade-9" <?php echo ($form_data['child_grade'] ?? '') === 'grade-9' ? 'selected' : ''; ?>>Grade 9</option>
-                                <option value="grade-10" <?php echo ($form_data['child_grade'] ?? '') === 'grade-10' ? 'selected' : ''; ?>>Grade 10</option>
-                                <option value="grade-11" <?php echo ($form_data['child_grade'] ?? '') === 'grade-11' ? 'selected' : ''; ?>>Grade 11</option>
-                                <option value="grade-12" <?php echo ($form_data['child_grade'] ?? '') === 'grade-12' ? 'selected' : ''; ?>>Grade 12</option>
-                            </select>
+                </div>
+
+                <!-- Teacher-specific Fields -->
+                <div class="dynamic-fields" id="teacherFields">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="subject">Subject <span class="required">*</span></label>
+                            <div class="input-wrapper">
+                                <i class="fas fa-book"></i>
+                                <input type="text" 
+                                       id="subject" 
+                                       name="subject" 
+                                       class="form-control" 
+                                       placeholder="e.g., Mathematics, Science"
+                                       value="<?php echo htmlspecialchars($form_data['subject'] ?? ''); ?>">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="department">Department <span class="required">*</span></label>
+                            <div class="input-wrapper">
+                                <i class="fas fa-building"></i>
+                                <select id="department" name="department" class="form-control">
+                                    <option value="">Select department</option>
+                                    <option value="science">Science</option>
+                                    <option value="mathematics">Mathematics</option>
+                                    <option value="english">English</option>
+                                    <option value="social-studies">Social Studies</option>
+                                    <option value="arts">Arts</option>
+                                    <option value="physical-education">Physical Education</option>
+                                    <option value="languages">Languages</option>
+                                    <option value="technology">Technology</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div class="checkbox-group">
-                    <input type="checkbox" id="terms" name="terms" value="1" <?php echo ($form_data['terms'] ?? false) ? 'checked' : ''; ?> required>
+                    <input type="checkbox" id="terms" name="terms" value="1" required>
                     <label for="terms">
-                        I agree to the <a href="terms.php" target="_blank">Terms of Service</a> and 
-                        <a href="privacy.php" target="_blank">Privacy Policy</a>. I understand that my information will be used to facilitate communication between parents and the school.
+                        I agree to the <a href="#" target="_blank">Terms of Service</a> and 
+                        <a href="#" target="_blank">Privacy Policy</a>
                     </label>
                 </div>
 
@@ -709,66 +794,184 @@ function createUser($data) {
                     Create Account
                 </button>
 
-                <div class="divider">
-                    <span>or</span>
-                </div>
-
-                <button type="button" class="btn btn-google" onclick="googleSignup()">
-                    <div class="google-icon"></div>
-                    Sign up with Google
-                </button>
-
                 <div class="login-link">
                     Already have an account? <a href="login.php">Sign In</a>
+                </div>
+
+                <div class="back-home">
+                    <a href="../../index.php">
+                        <i class="fas fa-home"></i> Back to Home
+                    </a>
                 </div>
             </form>
         </div>
     </div>
 
-   <script>
-    // Form validation and submission
-    document.getElementById('signupForm').addEventListener('submit', function(e) {
-        const requiredFields = [
-            'first_name',
-            'last_name',
-            'email',
-            'phone',
-            'password',
-            'confirm_password',
-            'child_name',
-            'child_grade'
-        ];
-        const signupBtn = document.getElementById('signupBtn');
-        let hasErrors = false;
+    <script>
+        // Role selection handler
+        const roleSelect = document.getElementById('role');
+        const parentFields = document.getElementById('parentFields');
+        const teacherFields = document.getElementById('teacherFields');
+        const leftIcon = document.getElementById('leftIcon');
+        const leftTitle = document.getElementById('leftTitle');
+        const leftDesc = document.getElementById('leftDesc');
 
-        requiredFields.forEach(fieldId => {
-            const field = document.getElementById(fieldId);
-            if (!field.value.trim()) {
-                field.classList.add('error');
-                hasErrors = true;
+        roleSelect.addEventListener('change', function() {
+            const role = this.value;
+            
+            // Hide all dynamic fields first
+            parentFields.classList.remove('active');
+            teacherFields.classList.remove('active');
+            
+            // Show relevant fields and update left side
+            if (role === 'parent') {
+                parentFields.classList.add('active');
+                leftIcon.className = 'fas fa-user-friends';
+                leftTitle.textContent = 'Welcome Parents!';
+                leftDesc.textContent = 'Join us to stay connected with your child\'s educational journey';
+                
+                // Make parent fields required
+                document.getElementById('child_name').required = true;
+                document.getElementById('child_grade').required = true;
+                document.getElementById('subject').required = false;
+                document.getElementById('department').required = false;
+                
+            } else if (role === 'teacher') {
+                teacherFields.classList.add('active');
+                leftIcon.className = 'fas fa-chalkboard-teacher';
+                leftTitle.textContent = 'Welcome Teachers!';
+                leftDesc.textContent = 'Join our platform to connect with students and parents effectively';
+                
+                // Make teacher fields required
+                document.getElementById('subject').required = true;
+                document.getElementById('department').required = true;
+                document.getElementById('child_name').required = false;
+                document.getElementById('child_grade').required = false;
+                
             } else {
-                field.classList.remove('error');
+                leftIcon.className = 'fas fa-users-cog';
+                leftTitle.textContent = 'Join Our Community!';
+                leftDesc.textContent = 'Create your account to connect with our educational platform';
             }
         });
 
-        // Extra check: confirm password match
-        const password = document.getElementById('password').value;
-        const confirmPassword = document.getElementById('confirm_password').value;
-        if (password !== confirmPassword) {
-            alert("Passwords do not match!");
-            hasErrors = true;
+        // Password toggle
+        document.getElementById('togglePassword1').addEventListener('click', function() {
+            togglePasswordVisibility('password', this);
+        });
+
+        document.getElementById('togglePassword2').addEventListener('click', function() {
+            togglePasswordVisibility('confirm_password', this);
+        });
+
+        function togglePasswordVisibility(inputId, icon) {
+            const input = document.getElementById(inputId);
+            if (input.type === 'password') {
+                input.type =input.type = 'text';
+                icon.classList.remove('fa-eye');
+                icon.classList.add('fa-eye-slash');
+            } else {
+                input.type = 'password';
+                icon.classList.remove('fa-eye-slash');
+                icon.classList.add('fa-eye');
+            }
         }
 
-        if (hasErrors) {
-            e.preventDefault(); // stop form from submitting
-            return false;
-        }
+        // Form validation
+        document.getElementById('signupForm').addEventListener('submit', function(e) {
+            const role = document.getElementById('role').value;
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirm_password').value;
+            const signupBtn = document.getElementById('signupBtn');
+            
+            // Check if role is selected
+            if (!role) {
+                e.preventDefault();
+                alert('Please select your role (Parent or Teacher)');
+                return false;
+            }
+            
+            // Password match validation
+            if (password !== confirmPassword) {
+                e.preventDefault();
+                alert('Passwords do not match!');
+                return false;
+            }
+            
+            // Password strength validation
+            if (password.length < 8) {
+                e.preventDefault();
+                alert('Password must be at least 8 characters long!');
+                return false;
+            }
+            
+            // Role-specific validation
+            if (role === 'parent') {
+                const childName = document.getElementById('child_name').value.trim();
+                const childGrade = document.getElementById('child_grade').value;
+                
+                if (!childName || !childGrade) {
+                    e.preventDefault();
+                    alert('Please fill in all child information fields!');
+                    return false;
+                }
+            } else if (role === 'teacher') {
+                const subject = document.getElementById('subject').value.trim();
+                const department = document.getElementById('department').value;
+                
+                if (!subject || !department) {
+                    e.preventDefault();
+                    alert('Please fill in all teacher information fields!');
+                    return false;
+                }
+            }
+            
+            // Check terms acceptance
+            const terms = document.getElementById('terms').checked;
+            if (!terms) {
+                e.preventDefault();
+                alert('Please accept the terms and conditions!');
+                return false;
+            }
+            
+            // Show loading state
+            signupBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Account...';
+            signupBtn.disabled = true;
+        });
 
-        // Disable button to prevent multiple submits
-        signupBtn.disabled = true;
-        signupBtn.textContent = "Creating Account...";
-    });
-</script>
+        // Auto-hide alerts after 5 seconds
+        document.addEventListener('DOMContentLoaded', function() {
+            const alerts = document.querySelectorAll('.alert');
+            alerts.forEach(alert => {
+                setTimeout(() => {
+                    alert.style.transition = 'opacity 0.3s';
+                    alert.style.opacity = '0';
+                    setTimeout(() => alert.remove(), 300);
+                }, 5000);
+            });
+        });
 
+        // Email validation on blur
+        document.getElementById('email').addEventListener('blur', function() {
+            const email = this.value;
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            
+            if (email && !emailRegex.test(email)) {
+                this.style.borderColor = '#e74c3c';
+                alert('Please enter a valid email address');
+            } else {
+                this.style.borderColor = '#e9ecef';
+            }
+        });
+
+        // Phone validation on input
+        document.getElementById('phone').addEventListener('input', function() {
+            // Allow only numbers, spaces, dashes, parentheses, and plus sign
+            this.value = this.value.replace(/[^0-9\s\-\(\)\+]/g, '');
+        });
+    </script>
 </body>
 </html>
+
+
+

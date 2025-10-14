@@ -419,8 +419,8 @@
                 <li><a href="#contact">Contact</a></li>
             </ul>
             <div class="nav-buttons">
-                <button class="btn-login">Login</button>
-                <button class="btn-signup">Sign Up</button>
+                <button class="btn-login" onclick="window.location.href='modules/auth/login.php'">Login</button>
+                <button class="btn-signup" onclick="window.location.href='modules/auth/signup.php'">Sign Up</button>
             </div>
         </div>
     </nav>
@@ -431,8 +431,8 @@
             <h1>Connecting Parents & Teachers for Student Success</h1>
             <p>A digital platform for seamless communication, real-time progress tracking, and collaborative student development</p>
             <div class="hero-buttons">
-                <button class="btn-hero btn-hero-primary">Get Started</button>
-                <button class="btn-hero btn-hero-secondary">Learn More</button>
+                <button class="btn-hero btn-hero-primary" onclick="window.location.href='modules/auth/signup.php'">Get Started</button>
+                <button class="btn-hero btn-hero-secondary" onclick="window.location.href='#features'">Learn More</button>
             </div>
         </div>
     </div>
@@ -547,7 +547,7 @@
     <div class="cta-section">
         <h2>Ready to Transform Education?</h2>
         <p>Join thousands of parents and teachers already using EduConnect</p>
-        <button class="btn-hero btn-hero-primary">Start Your Journey Today</button>
+        <button class="btn-hero btn-hero-primary" onclick="window.location.href='modules/auth/signup.php'">Start Your Journey Today</button>
     </div>
 
     <!-- Footer -->

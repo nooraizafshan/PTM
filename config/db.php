@@ -1,5 +1,6 @@
 <?php
 // config/db.php
+
 $db_config = [
     'host' => 'localhost',
     'username' => 'root',
