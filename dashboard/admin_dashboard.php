@@ -1,9 +1,9 @@
 <?php
-session_start();
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header("Location: auth/login.php");
-    exit();
-}
+// session_start();
+// if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+//     header("Location: auth/login.php");
+//     exit();
+// }
 
 $page_titles = [
     'dashboard' => ['Admin Dashboard', 'Overview of system activities'],
@@ -45,4 +45,4 @@ foreach ($name_parts as $part) {
             <i class="fas fa-chevron-down"></i>
         </div>
     </div>
-</header>
+</header> 

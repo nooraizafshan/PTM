@@ -1,3 +1,4 @@
+
 <style>
     .stats-grid {
         display: grid;
@@ -36,7 +37,7 @@
     .stat-icon.blue { background: linear-gradient(135deg, #4285f4, #357ae8); }
     .stat-icon.green { background: linear-gradient(135deg, #34a853, #2d9447); }
     .stat-icon.orange { background: linear-gradient(135deg, #fbbc04, #f9ab00); }
-    .stat-icon.red { background: linear-gradient(135deg, #ea4335, #d93025); }
+    .stat-icon.purple { background: linear-gradient(135deg, #9c27b0, #8e24aa); }
 
     .stat-content h3 {
         font-size: 32px;
@@ -95,88 +96,80 @@
     }
 </style>
 
-<!-- Admin Dashboard Stats -->
+<!-- ✅ Admin Stats Section -->
 <div class="stats-grid">
     <div class="stat-card">
         <div class="stat-icon blue">
-            <i class="fas fa-users"></i>
+            <i class="fas fa-users-cog"></i>
         </div>
         <div class="stat-content">
-            <h3>312</h3>
-            <p>Total Users</p>
-        </div>
-    </div>
-    
-    <div class="stat-card">
-        <div class="stat-icon green">
-            <i class="fas fa-chalkboard-teacher"></i>
-        </div>
-        <div class="stat-content">
-            <h3>48</h3>
+            <h3>12</h3>
             <p>Total Teachers</p>
         </div>
     </div>
-    
+
     <div class="stat-card">
-        <div class="stat-icon orange">
+        <div class="stat-icon green">
             <i class="fas fa-user-graduate"></i>
         </div>
         <div class="stat-content">
-            <h3>264</h3>
-            <p>Registered Students</p>
+            <h3>156</h3>
+            <p>Total Students</p>
         </div>
     </div>
-    
+
     <div class="stat-card">
-        <div class="stat-icon red">
-            <i class="fas fa-exclamation-circle"></i>
+        <div class="stat-icon orange">
+            <i class="fas fa-bus"></i>
         </div>
         <div class="stat-content">
-            <h3>7</h3>
-            <p>Pending Issues</p>
+            <h3>8</h3>
+            <p>Active Transport Routes</p>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i class="fas fa-comments"></i>
+        </div>
+        <div class="stat-content">
+            <h3>25</h3>
+            <p>New Feedback Messages</p>
         </div>
     </div>
 </div>
 
-<!-- Quick Actions -->
+<!-- ✅ Admin Quick Actions -->
 <div class="quick-actions">
-    <h2>Admin Quick Actions</h2>
+    <h2>Quick Actions</h2>
     <div class="action-grid">
         <a href="admin_dashboard.php?page=manage-users" class="action-btn">
-            <i class="fas fa-user-cog"></i>
+            <i class="fas fa-user-plus"></i>
             <span>Manage Users</span>
         </a>
-        <a href="admin_dashboard.php?page=manage-teachers" class="action-btn">
-            <i class="fas fa-chalkboard"></i>
-            <span>Manage Teachers</span>
+        <a href="admin_dashboard.php?page=transport" class="action-btn">
+            <i class="fas fa-bus"></i>
+            <span>Manage Transport</span>
         </a>
-        <a href="admin_dashboard.php?page=system-reports" class="action-btn">
+        <a href="admin_dashboard.php?page=reports" class="action-btn">
             <i class="fas fa-chart-line"></i>
-            <span>System Reports</span>
+            <span>View Reports</span>
         </a>
-        <a href="admin_dashboard.php?page=settings" class="action-btn">
-            <i class="fas fa-cogs"></i>
-            <span>System Settings</span>
-        </a>
-        <a href="admin_dashboard.php?page=notifications" class="action-btn">
-            <i class="fas fa-bell"></i>
-            <span>Manage Notifications</span>
-        </a>
-        <a href="admin_dashboard.php?page=backup" class="action-btn">
-            <i class="fas fa-database"></i>
-            <span>Backup Data</span>
+        <a href="admin_dashboard.php?page=feedback" class="action-btn">
+            <i class="fas fa-comments"></i>
+            <span>Review Feedback</span>
         </a>
     </div>
 </div>
 
-<!-- Welcome Section -->
+<!-- ✅ Welcome Info Box -->
 <div style="background: white; padding: 24px; border-radius: 12px; border: 1px solid #e9ecef;">
     <h2 style="font-size: 18px; font-weight: 600; color: #2c3e50; margin-bottom: 16px;">
         <i class="fas fa-info-circle" style="color: #4285f4; margin-right: 8px;"></i>
         Welcome to EduConnect Admin Dashboard
     </h2>
     <p style="color: #6c757d; line-height: 1.6;">
-        This is your control center for managing users, teachers, students, and system operations. 
-        Use the sidebar or quick actions to access various administrative tools efficiently.
+        This is your control panel for managing users, transport, feedback, and reports. 
+        Use the sidebar to navigate through administrative tools and system settings.
     </p>
 </div>
