@@ -1,4 +1,4 @@
-<?php
+<!-- <?php
 session_start();
 
 // Check if user is logged in and has parent role
@@ -960,7 +960,7 @@ $health_info = [
                             Print Profile
                         </a>
                         <a href="#" class="btn btn-primary" onclick="downloadProfile()">
-                            <i class="fas fa-download"></i>
+                            <!-- <i class="fas fa-download"></i>
                             Download
                         </a>
                     </div>
@@ -990,4 +990,4 @@ $health_info = [
                                     <div class="grade"><?php echo htmlspecialchars($subject['current_grade']); ?></div>
                                     <div class="percentage"><?php echo $subject['percentage']; ?>%</div>
                                     <div class="progress-bar">
-                                        <div class="progress-fill <?php echo $subject['percentage'] >= 90 ? 'excellent' : ($subject['percentage'] >= 80 ?
+                                        <div class="progress-fill <?php echo $subject['percentage'] >= 90 ? 'excellent' : ($subject['percentage'] >= 80 ? --> -->
