@@ -22,7 +22,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if ($role === 'admin') {
             $admin_email = 'admin@educonnect.com';
             $admin_password = 'admin123'; // you can change it anytime
-
             if ($email === $admin_email && $password === $admin_password) {
                 $_SESSION['user_id'] = '0';
                 $_SESSION['username'] = 'Admin User';
@@ -33,8 +32,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 if ($remember) {
                     setcookie('remember_token', bin2hex(random_bytes(32)), time() + (30 * 24 * 60 * 60), '/');
                 }
+              header("Location:../../dashboard/admin_dashboard.php");
 
-                header("Location: ../../admin_dashboard.php");
                 exit();
             } else {
                 $error = "Invalid admin credentials!";
@@ -62,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
                     // Redirect by role
                     if ($role == 'parent') {
-                        header("Location: ../../parent_dashboard.php");
+                    header("Location: ../../dashboard/parent_dashboard.php");
                     } elseif ($role == 'teacher') {
                         header("Location: ../../teacher_dashboard.php");
                     } else {

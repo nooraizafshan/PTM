@@ -143,10 +143,7 @@
 <div class="quick-actions">
     <h2>Quick Actions</h2>
     <div class="action-grid">
-        <a href="admin_dashboard.php?page=manage-users" class="action-btn">
-            <i class="fas fa-user-plus"></i>
-            <span>Manage Users</span>
-        </a>
+      
         <a href="admin_dashboard.php?page=transport" class="action-btn">
             <i class="fas fa-bus"></i>
             <span>Manage Transport</span>
@@ -169,7 +166,7 @@
         Welcome to EduConnect Admin Dashboard
     </h2>
     <p style="color: #6c757d; line-height: 1.6;">
-        This is your control panel for managing users, transport, feedback, and reports. 
-        Use the sidebar to navigate through administrative tools and system settings.
+        This is your control panel for managing transport, feedback, and reports. 
+        Use the sidebar to navigate through administrative tools.
     </p>
 </div>

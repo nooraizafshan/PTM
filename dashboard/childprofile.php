@@ -847,7 +847,7 @@ $health_info = [
 </head>
 <body>
     <div class="dashboard-container">
-        <!-- Sidebar -->
+         Sidebar 
         <aside class="sidebar">
             <div class="logo">
                 <div class="logo-icon">
@@ -896,9 +896,9 @@ $health_info = [
             </nav>
         </aside>
 
-        <!-- Main Content -->
+         Main Content 
         <main class="main-content">
-            <!-- Header -->
+            <!-- Header 
             <header class="header">
                 <div class="header-left">
                     <h1>Child Profile</h1>
@@ -920,9 +920,9 @@ $health_info = [
                 </div>
             </header>
 
-            <!-- Content -->
+            <!-- Content 
             <div class="content">
-                <!-- Profile Header -->
+                <!-- Profile Header 
                 <div class="profile-header">
                     <img src="<?php echo $child_info['avatar']; ?>" alt="<?php echo htmlspecialchars($child_info['name']); ?>" class="child-avatar-large">
                     <div class="profile-details">
@@ -960,15 +960,15 @@ $health_info = [
                             Print Profile
                         </a>
                         <a href="#" class="btn btn-primary" onclick="downloadProfile()">
-                            <!-- <i class="fas fa-download"></i>
+                             <i class="fas fa-download"></i>
                             Download
                         </a>
                     </div>
                 </div>
 
-                <!-- Profile Content Grid -->
+                 Profile Content Grid 
                 <div class="profile-content">
-                    <!-- Academic Performance -->
+                     Academic Performance 
                     <div class="profile-card">
                         <div class="card-header">
                             <h3>
@@ -980,14 +980,14 @@ $health_info = [
                             <a href="progress-report.php" class="btn-link">View Details</a>
                         </div>
                         <div class="card-body">
-                            <?php foreach ($academic_performance as $subject): ?>
+                            ?php foreach ($academic_performance as $subject): ?>
                             <div class="subject-item">
                                 <div class="subject-info">
-                                    <h4><?php echo htmlspecialchars($subject['subject']); ?></h4>
-                                    <p><?php echo htmlspecialchars($subject['teacher_remarks']); ?></p>
+                                    <h4>?php echo htmlspecialchars($subject['subject']); ?></h4>
+                                    <p>?php echo htmlspecialchars($subject['teacher_remarks']); ?></p>
                                 </div>
                                 <div class="subject-score">
-                                    <div class="grade"><?php echo htmlspecialchars($subject['current_grade']); ?></div>
-                                    <div class="percentage"><?php echo $subject['percentage']; ?>%</div>
+                                    <div class="grade">php echo htmlspecialchars($subject['current_grade']); ?></div>
+                                    <div class="percentage">php echo $subject['percentage']; ?>%</div>
                                     <div class="progress-bar">
-                                        <div class="progress-fill <?php echo $subject['percentage'] >= 90 ? 'excellent' : ($subject['percentage'] >= 80 ? --> -->
+                                        <div class="progress-fill ?php echo $subject['percentage'] >= 90 ? 'excellent' : ($subject['percentage'] >= 80 ?  -->
