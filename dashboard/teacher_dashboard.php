@@ -14,7 +14,7 @@ $page = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
 $pages = [
     'dashboard' => '../dashboard/teacher_dashboard.php',
     'mark-attendance' => 'modules/attendance/mark_attendance.php',
-    'generate-report' => 'modules/progress/generate_report.php',
+    'generate-report' => 'modules/progress/generate_progress.php',
     'meetings' => 'modules/meetings/schedule_meeting.php',
     'feedback' => 'modules/feedback/feedback.php',
    
@@ -276,7 +276,6 @@ $current_page_file = isset($pages[$page]) ? $pages[$page] : 'dashboard/teacher_d
     <div class="dashboard-container">
         <!-- Sidebar -->
         <?php include 'includes/teacher_sidebar.php'; ?>
-
         <!-- Main Content -->
         <main class="main-content">
             <!-- Header -->

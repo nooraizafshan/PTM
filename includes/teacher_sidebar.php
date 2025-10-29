@@ -26,7 +26,7 @@ $current = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
             <span>Mark Attendance</span>
         </a>
        
-        <a href="teacher_dashboard.php?page=generate-report" class="menu-item <?php echo $current == 'generate-report' ? 'active' : ''; ?>">
+        <a href="teacher_dashboard.php?page=generate-progress" class="menu-item <?php echo $current == 'generate-progress' ? 'active' : ''; ?>">
             <i class="fas fa-chart-bar"></i>
             <span>Progress Reports</span>
         </a>
