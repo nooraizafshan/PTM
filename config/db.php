@@ -1,3 +1,5 @@
+Database connection not available.
+
 <?php
 // config/db.php
 
