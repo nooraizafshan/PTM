@@ -2,15 +2,25 @@
 // Parent Dashboard Header Component
 // Usage: include 'includes/parent_header.php';
 
+// $page_titles = [
+//     'dashboard' => ['Parent Dashboard', 'Monitor your child\'s academic journey'],
+//     'child-profile' => ['Child Profile', 'View detailed student information'],
+//     'progress-report' => ['Progress Report', 'Academic performance and grades'],
+//     'attendance' => ['Attendance', 'View attendance records and history'],
+//     'meetings' => ['Meetings', 'Schedule and manage parent-teacher meetings'],
+//     'feedback' => ['Feedback', 'Teacher feedback and communications'],
+//     'transport' => ['Transportation', 'Bus routes and schedule information'],
+//     'parent-profile' => ['My Profile', 'View and edit your profile']
+// ];
 $page_titles = [
-    'dashboard' => ['Parent Dashboard', 'Monitor your child\'s academic journey'],
-    'child-profile' => ['Child Profile', 'View detailed student information'],
-    'progress-report' => ['Progress Report', 'Academic performance and grades'],
-    'attendance' => ['Attendance', 'View attendance records and history'],
+    'dashboard' => ['Dashboard', 'Welcome back to your dashboard'],
+    'students' => ['Student Management', 'Manage and monitor your students'],
+    'mark-attendance' => ['Mark Attendance', 'Record student attendance for today'],
+    'view-attendance' => ['View Attendance', 'View attendance records and reports'],
+    'generate-progress' => ['Progress Reports', 'Generate and manage student progress reports'],  // ✅ Ye change karo
     'meetings' => ['Meetings', 'Schedule and manage parent-teacher meetings'],
-    'feedback' => ['Feedback', 'Teacher feedback and communications'],
-    'transport' => ['Transportation', 'Bus routes and schedule information'],
-    'parent-profile' => ['My Profile', 'View and edit your profile']
+    'feedback' => ['Feedback', 'Send feedback to parents'],
+    'profile' => ['My Profile', 'View and edit your profile']
 ];
 
 $current_page = isset($_GET['page']) ? $_GET['page'] : 'dashboard';

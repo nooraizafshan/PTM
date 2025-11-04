@@ -1,20 +1,23 @@
 <?php
-session_start();
-
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 // Check if user is logged in and is a teacher
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] != 'teacher') {
     header("Location: modules/auth/login.php");
     exit();
 }
 
+
 // Get page parameter (default: dashboard)
 $page = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
 
 // Page mapping
 $pages = [
-    'dashboard' => '../dashboard/teacher_dashboard.php',
+    // 'dashboard' => '../dashboard/teacher_dashboard.php',
+    'dashboard' => 'modules/dashboard/teacher_dashboard_content.php',
     'mark-attendance' => 'modules/attendance/mark_attendance.php',
-    'generate-report' => 'modules/progress/generate_progress.php',
+    'generate-progress' => 'modules/progress/generate_progress.php',  
     'meetings' => 'modules/meetings/schedule_meeting.php',
     'feedback' => 'modules/feedback/feedback.php',
    

@@ -17,7 +17,7 @@ $current = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
             <i class="fas fa-home"></i><span>Dashboard</span>
         </a>
 
-        <a href="parent_dashboard.php?page=progress-report" class="menu-item <?php echo $current == 'progress-report' ? 'active' : ''; ?>">
+        <a href="parent_dashboard.php?page=view_progress.php" class="menu-item <?php echo $current == 'progress-report' ? 'active' : ''; ?>">
             <i class="fas fa-chart-line"></i><span>Progress Report</span>
         </a>
 
@@ -25,7 +25,7 @@ $current = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
             <i class="fas fa-calendar-check"></i><span>Attendance</span>
         </a>
 
-        <a href="parent_dashboard.php?page=meetings" class="menu-item <?php echo $current == 'meetings' ? 'active' : ''; ?>">
+        <a href="parent_dashboard.php?page=view_meetings" class="menu-item <?php echo $current == 'meetings' ? 'active' : ''; ?>">
             <i class="fas fa-video"></i><span>Meetings</span>
         </a>
 
