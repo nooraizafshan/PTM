@@ -1,50 +1,51 @@
 <?php
-// Parent Dashboard Header Component
-// Usage: include 'includes/parent_header.php';
+// =========================
+// ✅ Parent Dashboard Header
+// =========================
 
+// Define page titles and subtitles for parent dashboard
 $page_titles = [
-    'dashboard' => ['Parent Dashboard', 'Monitor your child\'s academic journey'],
-    'child-profile' => ['Child Profile', 'View detailed student information'],
-    'progress-report' => ['Progress Report', 'Academic performance and grades'],
-    'attendance' => ['Attendance', 'View attendance records and history'],
-    'meetings' => ['Meetings', 'Schedule and manage parent-teacher meetings'],
-    'feedback' => ['Feedback', 'Teacher feedback and communications'],
-    'transport' => ['Transportation', 'Bus routes and schedule information'],
-    'parent-profile' => ['My Profile', 'View and edit your profile']
+    'dashboard' => ['Parent Dashboard', 'Monitor your child’s academic journey'],
+    'view-progress' => ['Progress Report', 'Track your child’s academic performance'],
+    'view-attendance' => ['Attendance', 'Check attendance records and patterns'],
+    'meetings' => ['Meetings', 'Schedule or view parent-teacher meetings'],
+    'feedback' => ['Feedback', 'View teacher feedback and messages'],
+    'transport' => ['Transportation', 'View your child’s bus route and timing'],
+    'parent-profile' => ['My Profile', 'Manage your parent account'],
+    'settings' => ['Settings', 'Customize your account preferences'],
 ];
 
-$current_page = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
-$page_info = isset($page_titles[$current_page]) ? $page_titles[$current_page] : ['Dashboard', 'Welcome'];
+// Current page detection
+$current_page = $_GET['page'] ?? 'dashboard';
+$page_info = $page_titles[$current_page] ?? ['Dashboard', 'Welcome to EduConnect'];
 
-$parent_name = $_SESSION['username'] ?? 'Parent';
+// Parent info
+$parent_name = $_SESSION['username'] ?? 'Parent User';
 $name_parts = explode(' ', $parent_name);
 $initials = '';
 foreach ($name_parts as $part) {
-    if (!empty($part)) {
-        $initials .= strtoupper(substr($part, 0, 1));
-    }
+    $initials .= strtoupper(substr($part, 0, 1));
 }
-
-// Get notification count (you can fetch from database)
-$notification_count = 4;
 ?>
 
 <header class="header">
     <div class="header-left">
-        <h1><?php echo htmlspecialchars($page_info[0]); ?></h1>
-        <p><?php echo htmlspecialchars($page_info[1]); ?></p>
+        <h1><?= htmlspecialchars($page_info[0]) ?></h1>
+        <p><?= htmlspecialchars($page_info[1]) ?></p>
     </div>
+
     <div class="header-right">
-        <div class="notification-icon" onclick="toggleNotifications()">
+        <!-- Notifications -->
+        <div class="notification-icon" title="Notifications">
             <i class="fas fa-bell"></i>
-            <?php if ($notification_count > 0): ?>
-            <div class="notification-badge"><?php echo $notification_count; ?></div>
-            <?php endif; ?>
+            <div class="notification-badge">3</div>
         </div>
-        <div class="user-profile" onclick="toggleProfileMenu()">
-            <div class="user-avatar"><?php echo $initials; ?></div>
+
+        <!-- User Profile -->
+        <div class="user-profile">
+            <div class="user-avatar"><?= $initials ?></div>
             <div class="user-info">
-                <h4><?php echo htmlspecialchars($parent_name); ?></h4>
+                <h4><?= htmlspecialchars($parent_name) ?></h4>
                 <p>Parent</p>
             </div>
             <i class="fas fa-chevron-down"></i>
@@ -52,107 +53,129 @@ $notification_count = 4;
     </div>
 </header>
 
-<!-- Notification Dropdown (Hidden by default) -->
-<div id="notificationDropdown" class="notification-dropdown" style="display: none;">
-    <div class="notification-header">
-        <h4>Notifications</h4>
-        <a href="#" onclick="markAllRead()">Mark all as read</a>
-    </div>
-    <div class="notification-list">
-        <div class="notification-item unread">
-            <div class="notification-icon-wrapper green">
-                <i class="fas fa-comment-alt"></i>
-            </div>
-            <div class="notification-content">
-                <p class="notification-title">New Teacher Feedback</p>
-                <p class="notification-text">Excellent performance in Mathematics</p>
-                <span class="notification-time">2 hours ago</span>
-            </div>
-        </div>
-        <div class="notification-item">
-            <div class="notification-icon-wrapper blue">
-                <i class="fas fa-calendar"></i>
-            </div>
-            <div class="notification-content">
-                <p class="notification-title">Meeting Reminder</p>
-                <p class="notification-text">Parent-teacher meeting tomorrow at 3 PM</p>
-                <span class="notification-time">5 hours ago</span>
-            </div>
-        </div>
-        <div class="notification-item">
-            <div class="notification-icon-wrapper orange">
-                <i class="fas fa-bus"></i>
-            </div>
-            <div class="notification-content">
-                <p class="notification-title">Transport Update</p>
-                <p class="notification-text">Bus route modified temporarily</p>
-                <span class="notification-time">1 day ago</span>
-            </div>
-        </div>
-    </div>
-    <div class="notification-footer">
-        <a href="parent_dashboard.php?page=notifications">View All Notifications</a>
-    </div>
-</div>
-
-<!-- Profile Dropdown (Hidden by default) -->
-<div id="profileDropdown" class="profile-dropdown" style="display: none;">
-    <div class="profile-menu-header">
-        <div class="profile-menu-avatar"><?php echo $initials; ?></div>
-        <div>
-            <h4><?php echo htmlspecialchars($parent_name); ?></h4>
-            <p>Parent Account</p>
-        </div>
-    </div>
-    <div class="profile-menu-divider"></div>
-    <a href="parent_dashboard.php?page=parent-profile" class="profile-menu-item">
-        <i class="fas fa-user"></i>
-        <span>My Profile</span>
-    </a>
-    <a href="parent_dashboard.php?page=settings" class="profile-menu-item">
-        <i class="fas fa-cog"></i>
-        <span>Settings</span>
-    </a>
-    <a href="parent_dashboard.php?page=help" class="profile-menu-item">
-        <i class="fas fa-question-circle"></i>
-        <span>Help & Support</span>
-    </a>
-    <div class="profile-menu-divider"></div>
-    <a href="../modules/auth/logout.php" class="profile-menu-item logout">
-        <i class="fas fa-sign-out-alt"></i>
-        <span>Logout</span>
-    </a>
-</div>
-
-<script>
-function toggleNotifications() {
-    const dropdown = document.getElementById('notificationDropdown');
-    const profileDropdown = document.getElementById('profileDropdown');
-    profileDropdown.style.display = 'none';
-    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+<!-- ========================= -->
+<!-- ✅ STYLES -->
+<!-- ========================= -->
+<style>
+/* ===== HEADER CONTAINER ===== */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #ffffff;
+    padding: 14px 28px;
+    border-bottom: 1px solid #e5e7eb;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
 }
 
-function toggleProfileMenu() {
-    const dropdown = document.getElementById('profileDropdown');
-    const notificationDropdown = document.getElementById('notificationDropdown');
-    notificationDropdown.style.display = 'none';
-    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+/* ===== HEADER LEFT ===== */
+.header-left h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #1e40af;
+    margin: 0;
 }
 
-function markAllRead() {
-    document.querySelectorAll('.notification-item').forEach(item => {
-        item.classList.remove('unread');
-    });
-    document.querySelector('.notification-badge').style.display = 'none';
+.header-left p {
+    font-size: 0.9rem;
+    color: #6b7280;
+    margin: 4px 0 0;
 }
 
-// Close dropdowns when clicking outside
-document.addEventListener('click', function(event) {
-    if (!event.target.closest('.notification-icon') && !event.target.closest('.notification-dropdown')) {
-        document.getElementById('notificationDropdown').style.display = 'none';
+/* ===== HEADER RIGHT ===== */
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
+/* ===== NOTIFICATION ICON ===== */
+.notification-icon {
+    position: relative;
+    font-size: 1.4rem;
+    color: #1e40af;
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.notification-icon:hover {
+    color: #2563eb;
+}
+
+.notification-badge {
+    position: absolute;
+    top: -5px;
+    right: -6px;
+    background: #ef4444;
+    color: white;
+    font-size: 0.7rem;
+    border-radius: 50%;
+    padding: 2px 6px;
+}
+
+/* ===== USER PROFILE BOX ===== */
+.user-profile {
+    display: flex;
+    align-items: center;
+    background: #f3f4f6;
+    border-radius: 40px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.user-profile:hover {
+    background: #e5e7eb;
+}
+
+.user-avatar {
+    width: 42px;
+    height: 42px;
+    background: #2563eb;
+    color: #fff;
+    font-weight: 600;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    margin-right: 10px;
+}
+
+.user-info h4 {
+    margin: 0;
+    font-size: 0.95rem;
+    color: #111827;
+    line-height: 1.2;
+}
+
+.user-info p {
+    margin: 0;
+    font-size: 0.8rem;
+    color: #6b7280;
+}
+
+/* Chevron */
+.user-profile i {
+    color: #6b7280;
+    margin-left: 6px;
+    font-size: 0.8rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
     }
-    if (!event.target.closest('.user-profile') && !event.target.closest('.profile-dropdown')) {
-        document.getElementById('profileDropdown').style.display = 'none';
+
+    .header-right {
+        width: 100%;
+        justify-content: space-between;
     }
-});
-</script>
+}
+</style>

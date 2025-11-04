@@ -1,233 +1,285 @@
 <?php
-// modules/progress/generate_progress.php
-// Generates and displays student progress reports with styled UI
-
-// --- Include Database Connection ---
-if (!isset($conn) || !($conn instanceof mysqli)) {
-    $db_path = __DIR__ . '/../../config/db.php';
-    if (file_exists($db_path)) {
-        include_once $db_path;
-        if (function_exists('dbConnect')) {
-            $conn = dbConnect();
-        }
-    }
+require_once __DIR__ . '/../../config/db.php';
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
-// --- Ensure Connection Exists ---
-if (!isset($conn) || !($conn instanceof mysqli)) {
-    echo '<div class="alert alert-danger" style="background:#ff7675;color:white;padding:12px;border-radius:8px;">❌ Database connection not available. Please check config/db.php</div>';
-    return;
+// Check if teacher is logged in
+if (!isset($_SESSION['user_id'])) {
+    die("<p style='color:red;'>Please log in to submit the report.</p>");
 }
 
-// --- Fetch Students for Dropdown ---
+// Connect to database
+$conn = dbConnect();
+if (!$conn) {
+    die("<p style='color:red;'>Database connection not available.</p>");
+}
+
+// Fetch all active students
 $students = [];
-$res = $conn->query("SELECT student_id, student_name, class, roll_number FROM students ORDER BY class, roll_number");
-if ($res) {
-    while ($r = $res->fetch_assoc()) {
-        $students[] = $r;
+$studentQuery = $conn->query("SELECT student_id, student_name FROM students WHERE status='active' ORDER BY student_name ASC");
+if ($studentQuery) {
+    while ($row = $studentQuery->fetch_assoc()) {
+        $students[] = $row;
     }
-    $res->free();
 }
 
-// --- Handle Filters ---
-$filter_student = isset($_GET['student_id']) && $_GET['student_id'] !== '' ? intval($_GET['student_id']) : null;
-$filter_term    = isset($_GET['term']) && $_GET['term'] !== '' ? $conn->real_escape_string($_GET['term']) : null;
+// Define subjects
+$subjects = ['Mathematics', 'Science', 'English', 'History', 'Geography', 'Computer'];
 
-// --- Build SQL Query ---
-$sql = "
-    SELECT 
-        pr.*, 
-        s.student_name AS student_name, 
-        s.class AS student_class, 
-        s.roll_number
-    FROM progress_reports pr
-    LEFT JOIN students s ON pr.student_id = s.student_id
-";
-$conditions = [];
-if ($filter_student) {
-    $conditions[] = "pr.student_id = " . $filter_student;
-}
-if ($filter_term) {
-    $conditions[] = "pr.term = '" . $filter_term . "'";
-}
-if (count($conditions) > 0) {
-    $sql .= " WHERE " . implode(" AND ", $conditions);
-}
-$sql .= " ORDER BY s.class, s.roll_number, pr.subject";
+// Handle form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $student_id       = $_POST['student_id'];
+    $subject          = $_POST['subject'];
+    $marks_obtained   = $_POST['marks_obtained'];
+    $total_marks      = $_POST['total_marks'];
+    $percentage       = $_POST['percentage'];
+    $grade            = $_POST['grade'];
+    $remarks          = $_POST['remarks'] ?? '';
+    $term             = $_POST['term'];
+    $teacher_name     = $_SESSION['user_name'] ?? 'Teacher';
 
-// --- Execute Query ---
-$result = $conn->query($sql);
+    // Get student name from DB
+    $name = "";
+    $studentResult = $conn->query("SELECT student_name FROM students WHERE student_id = $student_id LIMIT 1");
+    if ($studentResult && $studentResult->num_rows > 0) {
+        $row = $studentResult->fetch_assoc();
+        $name = $row['student_name'];
+    }
+
+    // Insert into student_report
+    $stmt = $conn->prepare("INSERT INTO student_report
+        (student_id, name, subject, marks_obtained, total_marks, percentage, grade, remarks, term, teacher_name, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+
+    if ($stmt) {
+        $stmt->bind_param(
+            "issddsssss",
+            $student_id,
+            $name,
+            $subject,
+            $marks_obtained,
+            $total_marks,
+            $percentage,
+            $grade,
+            $remarks,
+            $term,
+            $teacher_name
+        );
+        $stmt->execute();
+        $stmt->close();
+        echo "<p style='color:#00b894;'>Report saved successfully!</p>";
+    } else {
+        echo "<p style='color:red;'>Error: " . $conn->error . "</p>";
+    }
+}
+
+// Fetch saved reports
+$reports = [];
+$reportQuery = $conn->query("
+    SELECT r.*, s.student_name 
+    FROM student_report r 
+    JOIN students s ON r.student_id = s.student_id
+    ORDER BY r.created_at DESC
+");
+if ($reportQuery) {
+    while ($row = $reportQuery->fetch_assoc()) {
+        $reports[] = $row;
+    }
+}
+
+$conn->close();
 ?>
 
-<!-- 🌿 Custom CSS -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Generate Student Report</title>
 <style>
-    .progress-card {
-        background: #fff;
-        border-radius: 16px;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.08);
-        padding: 24px;
-        margin: 10px auto;
-    }
-    .progress-header {
-        background: linear-gradient(90deg, #a8e6cf, #7fcdcd, #81c784);
-        color: #004d40;
-        padding: 14px 20px;
-        border-radius: 12px;
-        font-weight: bold;
-        font-size: 1.5rem;
-        margin-bottom: 20px;
-    }
-    .progress-form {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 16px;
-        align-items: flex-end;
-        margin-bottom: 20px;
-    }
-    .progress-form label {
-        font-weight: 500;
-        color: #00695c;
-    }
-    .progress-form select, .progress-form input {
-        border: 1px solid #ccc;
-        border-radius: 6px;
-        padding: 8px 10px;
-    }
-    .btn-primary {
-        background: #00b894;
-        border: none;
-        color: white;
-        padding: 8px 14px;
-        border-radius: 6px;
-        transition: background 0.3s;
-    }
-    .btn-primary:hover {
-        background: #00cec9;
-    }
-    .btn-outline-secondary {
-        border: 1px solid #00b894;
-        color: #00b894;
-        background: transparent;
-        padding: 8px 14px;
-        border-radius: 6px;
-    }
-    .btn-outline-secondary:hover {
-        background: #a8e6cf;
-        color: #00695c;
-    }
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 10px;
-    }
-    th {
-        background: #a8e6cf;
-        color: #004d40;
-        padding: 10px;
-        border-bottom: 2px solid #7fcdcd;
-    }
-    td {
-        padding: 8px;
-        border-bottom: 1px solid #eee;
-    }
-    tr:hover {
-        background: #f1fef6;
-    }
-    .alert {
-        padding: 10px;
-        border-radius: 8px;
-        margin: 10px 0;
-    }
-    .alert-info { background: #e0f7fa; color: #006064; }
-    .alert-warning { background: #fff3cd; color: #856404; }
+    
+body {
+    font-family: Arial, sans-serif;
+    background: #f0f4f3;
+    margin: 0;
+     min-height: 100vh;
+    padding: 20px;
+    
+    color: #333;
+}
+
+.form-container {
+    
+            max-width: 1000px;
+            margin: 40px auto;
+            padding: 30px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        
+}
+
+.form-container h2 {
+    background: linear-gradient(135deg, #a8e6cf, #7fcdcd, #81c784);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 26px;
+    margin-bottom: 20px;
+}
+
+label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+}
+input, select {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    font-size: 14px;
+}
+
+button {
+    background: linear-gradient(135deg, #00b894, #00cec9);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: transform 0.2s;
+}
+button:hover {
+    transform: translateY(-2px);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    border-radius: 12px;
+    overflow: hidden;
+    background: white;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+th, td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+th {
+    background: linear-gradient(135deg, #a8e6cf, #7fcdcd, #81c784);
+    color: white;
+    text-transform: uppercase;
+}
+tr:hover {
+    background: #f1f7f5;
+}
+
+.badge {
+    padding: 5px 10px;
+    border-radius: 12px;
+    color: white;
+    font-weight: 600;
+}
+.badge-excellent { background: #00b894; }
+.badge-good { background: #00cec9; }
+.badge-average { background: #81c784; }
+.badge-low { background: #7fcdcd; }
 </style>
+</head>
+<body>
 
-<div class="progress-card">
-    <div class="progress-header">📁 Generated Progress Reports</div>
+<div class="form-container">
+    <h2>Upload Student Report</h2>
+    <form method="post">
+        <label>Student Name</label>
+        <select name="student_id" required>
+            <option value="">-- Select Student --</option>
+            <?php foreach ($students as $stu): ?>
+                <option value="<?php echo $stu['student_id']; ?>">
+                    <?php echo htmlspecialchars($stu['student_name']); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
 
-    <form method="get" class="progress-form">
-        <input type="hidden" name="page" value="generate-progress">
+        <label>Subject</label>
+        <select name="subject" required>
+            <option value="">-- Select Subject --</option>
+            <?php foreach ($subjects as $subj): ?>
+                <option value="<?php echo htmlspecialchars($subj); ?>"><?php echo htmlspecialchars($subj); ?></option>
+            <?php endforeach; ?>
+        </select>
 
-        <div>
-            <label class="form-label">Student</label><br>
-            <select name="student_id" class="form-select">
-                <option value="">-- All students --</option>
-                <?php foreach ($students as $st): ?>
-                    <option value="<?= (int)$st['student_id'] ?>" <?= ($filter_student && $filter_student == $st['student_id']) ? 'selected' : '' ?>>
-                        <?= htmlspecialchars($st['student_name'] . " (Class: {$st['class']}, Roll: {$st['roll_number']})") ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </div>
+        <label>Marks Obtained</label>
+        <input type="number" name="marks_obtained" step="0.01" required>
 
-        <div>
-            <label class="form-label">Term</label><br>
-            <select name="term" class="form-select">
-                <option value="">-- All terms --</option>
-                <option value="Term 1" <?= ($filter_term === 'Term 1') ? 'selected' : '' ?>>Term 1</option>
-                <option value="Term 2" <?= ($filter_term === 'Term 2') ? 'selected' : '' ?>>Term 2</option>
-                <option value="Midterm" <?= ($filter_term === 'Midterm') ? 'selected' : '' ?>>Midterm</option>
-                <option value="Final" <?= ($filter_term === 'Final') ? 'selected' : '' ?>>Final</option>
-            </select>
-        </div>
+        <label>Total Marks</label>
+        <input type="number" name="total_marks" step="0.01" required>
 
-        <div>
-            <button type="submit" class="btn-primary">Apply Filters</button>
-        </div>
+        <label>Percentage</label>
+        <input type="number" name="percentage" step="0.01" required>
 
-        <div style="margin-left:auto;">
-            <a href="teacher_dashboard.php?page=generate-progress" class="btn-outline-secondary">Reset</a>
-        </div>
+        <label>Grade</label>
+        <input type="text" name="grade" required>
+
+        <label>Remarks</label>
+        <input type="text" name="remarks">
+
+        <label>Term</label>
+        <select name="term" required>
+            <option value="">-- Select Term --</option>
+            <option value="Term 1">Term 1</option>
+            <option value="Term 2">Term 2</option>
+            <option value="Mid Term">Mid Term</option>
+            <option value="Final Term">Final Term</option>
+        </select>
+
+        <button type="submit">Save Report</button>
     </form>
-
-    <?php if (!$result): ?>
-        <div class="alert alert-warning">⚠️ Error running query: <?= htmlspecialchars($conn->error) ?></div>
-    <?php else: ?>
-        <?php if ($result->num_rows === 0): ?>
-            <div class="alert alert-info">ℹ️ No progress reports found for the selected filters.</div>
-        <?php else: ?>
-            <div style="overflow:auto;">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Student</th>
-                            <th>Class / Roll</th>
-                            <th>Term</th>
-                            <th>Subject</th>
-                            <th>Marks</th>
-                            <th>Total</th>
-                            <th>%</th>
-                            <th>Grade</th>
-                            <th>Remarks</th>
-                            <th>Teacher</th>
-                            <th>Created</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php while ($row = $result->fetch_assoc()): ?>
-                            <tr>
-                                <td><?= htmlspecialchars($row['student_name'] ?? 'Unknown') ?></td>
-                                <td><?= htmlspecialchars(($row['student_class'] ?? '-') . ' / ' . ($row['roll_number'] ?? '-')) ?></td>
-                                <td><?= htmlspecialchars($row['term']) ?></td>
-                                <td><?= htmlspecialchars($row['subject']) ?></td>
-                                <td><?= htmlspecialchars($row['marks_obtained']) ?></td>
-                                <td><?= htmlspecialchars($row['total_marks']) ?></td>
-                                <td><?= is_numeric($row['percentage']) ? number_format($row['percentage'], 2) : htmlspecialchars($row['percentage']) ?></td>
-                                <td><?= htmlspecialchars($row['grade']) ?></td>
-                                <td><?= htmlspecialchars($row['remarks']) ?></td>
-                                <td><?= htmlspecialchars($row['teacher_name']) ?></td>
-                                <td><?= htmlspecialchars($row['created_at'] ?? '-') ?></td>
-                            </tr>
-                        <?php endwhile; ?>
-                    </tbody>
-                </table>
-            </div>
-        <?php endif; ?>
-        <?php $result->free(); ?>
-    <?php endif; ?>
 </div>
 
-<?php
-// Optional: Close DB connection if not reused
-// $conn->close();
-?>
+<table>
+    <thead>
+        <tr>
+            <th>Student</th>
+            <th>Subject</th>
+            <th>Marks Obtained</th>
+            <th>Total Marks</th>
+            <th>Percentage</th>
+            <th>Grade</th>
+            <th>Term</th>
+            <th>Teacher</th>
+            <th>Remarks</th>
+        </tr>
+    </thead>
+    <tbody>
+    <?php if (!empty($reports)): ?>
+        <?php foreach ($reports as $rep): ?>
+        <tr>
+            <td><?php echo htmlspecialchars($rep['student_name']); ?></td>
+            <td><?php echo htmlspecialchars($rep['subject']); ?></td>
+            <td><?php echo $rep['marks_obtained']; ?></td>
+            <td><?php echo $rep['total_marks']; ?></td>
+            <td>
+                <?php 
+                $perc = $rep['percentage'];
+                $badge = $perc >= 90 ? 'badge-excellent' : ($perc >= 75 ? 'badge-good' : ($perc >= 50 ? 'badge-average' : 'badge-low'));
+                echo "<span class='badge $badge'>$perc%</span>";
+                ?>
+            </td>
+            <td><?php echo htmlspecialchars($rep['grade']); ?></td>
+            <td><?php echo htmlspecialchars($rep['term']); ?></td>
+            <td><?php echo htmlspecialchars($rep['teacher_name']); ?></td>
+            <td><?php echo htmlspecialchars($rep['remarks']); ?></td>
+        </tr>
+        <?php endforeach; ?>
+    <?php else: ?>
+        <tr><td colspan="9" style="text-align:center;">No reports found.</td></tr>
+    <?php endif; ?>
+    </tbody>
+</table>
+
+</body>
+</html>

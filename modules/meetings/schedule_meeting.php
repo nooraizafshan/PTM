@@ -1,497 +1,177 @@
+<?php
+// Prevent header issues
+ob_start();
 
+// Show PHP errors during development (turn off on production)
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+// Safe session start
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Include database helper
+require_once __DIR__ . '/../../config/db.php';
+$conn = dbConnect();
+if (!$conn) {
+    die("Database connection not available. Please check config/db.php and DB server.");
+}
+
+// Variables for form feedback
+$success = $error = "";
+
+// Handle meeting scheduling form
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $parentEmail = trim($_POST['parent_name'] ?? '');
+    $student = trim($_POST['student_name'] ?? '');
+    $date = trim($_POST['meeting_date'] ?? '');
+    $time = trim($_POST['meeting_time'] ?? '');
+    $status = trim($_POST['meeting_status'] ?? 'scheduled');
+
+    if ($parentEmail === '' || $student === '' || $date === '' || $time === '') {
+        $error = "All fields are required.";
+    } else {
+        // ✅ Get parent name from users table
+        $stmt = $conn->prepare("SELECT name FROM users WHERE email = ? AND role = 'parent' LIMIT 1");
+        $stmt->bind_param("s", $parentEmail);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $parent = $result->fetch_assoc();
+        $stmt->close();
+
+        if (!$parent) {
+            $error = "Parent not found for email: " . htmlspecialchars($parentEmail);
+        } else {
+            $parentName = $parent['name'];
+            // ✅ Insert meeting record
+            $stmt = $conn->prepare("INSERT INTO ptm_meetings (parent_name, student_name, meeting_date, meeting_time, status) VALUES (?,?,?,?,?)");
+            $stmt->bind_param("sssss", $parentName, $student, $date, $time, $status);
+            if ($stmt->execute()) {
+                $success = "Meeting scheduled successfully!";
+            } else {
+                $error = "Database error: " . $stmt->error;
+            }
+            $stmt->close();
+        }
+    }
+}
+
+// Fetch parents list
+$parents = [];
+$res = $conn->query("SELECT name, email FROM users WHERE role='parent' ORDER BY name ASC");
+while ($row = $res->fetch_assoc()) $parents[] = $row;
+
+// Fetch students (✅ all students now, not filtered by parent)
+$students = [];
+$res = $conn->query("SELECT student_name FROM students WHERE status='active' ORDER BY student_name ASC");
+while ($row = $res->fetch_assoc()) $students[] = $row['student_name'];
+
+// Fetch meetings
+$meetings = [];
+$res = $conn->query("SELECT * FROM ptm_meetings ORDER BY meeting_date ASC, meeting_time ASC");
+while ($row = $res->fetch_assoc()) $meetings[] = $row;
+
+$conn->close();
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Parent-Teacher Meetings</title>
 <style>
-/* ====== PAGE HEADER ====== */
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 2px solid #e9ecef;
-}
-
-.page-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.page-title i {
-  width: 48px;
-  height: 48px;
-  background: linear-gradient(135deg, #9c27b0, #e91e63);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 20px;
-}
-
-.page-title h2 {
-  font-size: 24px;
-  font-weight: 700;
-  color: #2c3e50;
-  margin-bottom: 4px;
-}
-
-.page-title p {
-  font-size: 14px;
-  color: #6c757d;
-}
-
-/* ====== STATS CARDS ====== */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-  margin-bottom: 30px;
-}
-
-.stat-card {
-  background: white;
-  padding: 20px;
-  border-radius: 12px;
-  border: 1px solid #e9ecef;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  transition: all 0.3s;
-}
-
-.stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-.stat-icon {
-  width: 50px;
-  height: 50px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  color: white;
-}
-
-.stat-icon.blue { background: #4285f4; }
-.stat-icon.green { background: #34a853; }
-.stat-icon.orange { background: #fbbc04; }
-.stat-icon.red { background: #ea4335; }
-
-.stat-content h3 {
-  font-size: 28px;
-  font-weight: 700;
-  color: #2c3e50;
-  margin-bottom: 4px;
-}
-
-.stat-content p {
-  font-size: 13px;
-  color: #6c757d;
-}
-
-/* ====== FILTER SECTION ====== */
-.filters {
-  background: white;
-  padding: 20px;
-  border-radius: 12px;
-  border: 1px solid #e9ecef;
-  margin-bottom: 24px;
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.filters label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #2c3e50;
-}
-
-.form-control {
-  padding: 10px 16px;
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
-  font-size: 14px;
-}
-
-/* ====== BUTTONS ====== */
-.btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, #4285f4, #34a853);
-  color: white;
-}
-
-.btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-}
-
-.btn-sm {
-  padding: 6px 12px;
-  font-size: 13px;
-}
-
-/* ====== TABLES ====== */
-.report-card {
-  background: white;
-  border-radius: 12px;
-  border: 1px solid #e9ecef;
-  overflow: hidden;
-  margin-bottom: 24px;
-}
-
-.card-header {
-  padding: 20px 24px;
-  background: #f8f9fa;
-  border-bottom: 1px solid #e9ecef;
-}
-
-.card-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #2c3e50;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.report-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.report-table thead {
-  background: #f8f9fa;
-}
-
-.report-table th {
-  padding: 16px 24px;
-  text-align: left;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: #6c757d;
-  border-bottom: 2px solid #e9ecef;
-}
-
-.report-table td {
-  padding: 16px 24px;
-  border-bottom: 1px solid #f8f9fa;
-  font-size: 14px;
-}
-
-.report-table tbody tr:hover {
-  background: #f8f9fa;
-}
-
-/* ====== BADGES ====== */
-.badge {
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.badge-success { background: #d4edda; color: #155724; }
-.badge-warning { background: #fff3cd; color: #856404; }
-.badge-danger { background: #f8d7da; color: #721c24; }
-
-/* ====== TABS ====== */
-.tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-}
-
-.tab-btn {
-  padding: 12px 24px;
-  background: white;
-  border: 2px solid #e9ecef;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  color: #6c757d;
-}
-
-.tab-btn.active {
-  background: #4285f4;
-  color: white;
-  border-color: #4285f4;
-}
-
-.tab-content {
-  display: none;
-}
-
-.tab-content.active {
-  display: block;
-}
-
-/* ====== MODAL (For Schedule Meeting Button) ====== */
-.modal {
-  display: none;
-  position: fixed;
-  z-index: 1000;
-  left: 0; top: 0;
-  width: 100%; height: 100%;
-  background: rgba(0,0,0,0.5);
-  align-items: center;
-  justify-content: center;
-}
-
-.modal-content {
-  background: white;
-  padding: 24px;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 500px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid #e9ecef;
-  padding-bottom: 10px;
-  margin-bottom: 16px;
-}
-
-.modal-header h3 {
-  font-size: 20px;
-  font-weight: 700;
-  color: #2c3e50;
-}
-
-.close-btn {
-  font-size: 20px;
-  cursor: pointer;
-  color: #6c757d;
-}
-
-.modal-body label {
-  display: block;
-  margin-top: 12px;
-  font-weight: 600;
-  font-size: 14px;
-  color: #2c3e50;
-}
-
-.modal-body input,
-.modal-body select,
-.modal-body textarea {
-  width: 100%;
-  margin-top: 8px;
-  padding: 10px 14px;
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
-  font-size: 14px;
-}
-
-/* ====== RESPONSIVE ====== */
-@media (max-width: 768px) {
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-  }
-
-  .filters {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .filters > * {
-    width: 100%;
-  }
-
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
-}
+body{font-family:Arial,sans-serif;margin:20px;background:#f2f2f2;}
+.page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;}
+.btn{padding:10px 20px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;background:#4285f4;color:#fff;transition:0.3s;}
+.btn:hover{background:#2d3a8b;}
+.report-card{background:white;border-radius:12px;border:1px solid #e9ecef;overflow:hidden;margin-bottom:24px;}
+.card-header{padding:16px;background:#f8f9fa;border-bottom:1px solid #e9ecef;}
+.card-title{font-size:18px;font-weight:600;color:#2c3e50;}
+.report-table{width:100%;border-collapse:collapse;}
+.report-table th, .report-table td{padding:12px;border-bottom:1px solid #f8f9fa;text-align:left;}
+.report-table th{background:#f8f9fa;color:#6c757d;text-transform:uppercase;font-weight:600;}
+.modal{display:none;position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;}
+.modal-content{background:white;padding:24px;border-radius:12px;width:90%;max-width:520px;box-shadow:0 4px 20px rgba(0,0,0,0.2);}
+.close-btn{font-size:20px;cursor:pointer;color:#6c757d;float:right;}
+input, select{width:100%;padding:10px 14px;border:1px solid #ccc;border-radius:8px;font-size:14px;margin-bottom:15px;box-sizing:border-box;}
+.success{background:#d4edda;color:#155724;padding:10px;border-radius:6px;margin-bottom:15px;}
+.error{background:#f8d7da;color:#721c24;padding:10px;border-radius:6px;margin-bottom:15px;}
+.badge{padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;}
+.badge-scheduled{background:#d4edda;color:#155724;}
+.badge-completed{background:#cce5ff;color:#004085;}
+.badge-cancelled{background:#f8d7da;color:#721c24;}
 </style>
+</head>
+<body>
 <div class="page-header">
-  <div class="page-title">
-    <i class="fas fa-video"></i>
-    <div>
-      <h2>Parent–Teacher Meetings</h2>
-      <p>Schedule, manage, and track parent-teacher meetings</p>
-    </div>
-  </div>
-  <button class="btn btn-primary">
-    <i class="fas fa-plus"></i> Schedule Meeting
-  </button>
+    <h2>Parent-Teacher Meetings</h2>
+    <button class="btn" onclick="document.getElementById('modal').style.display='flex'">Schedule Meeting</button>
 </div>
 
-<!-- Stats Cards -->
-<div class="stats-grid">
-  <div class="stat-card">
-    <div class="stat-icon blue"><i class="fas fa-calendar-check"></i></div>
-    <div class="stat-content">
-      <h3>12</h3>
-      <p>Upcoming Meetings</p>
-    </div>
-  </div>
+<?php if ($success): ?><div class="success"><?= htmlspecialchars($success) ?></div><?php endif; ?>
+<?php if ($error): ?><div class="error"><?= nl2br(htmlspecialchars($error)) ?></div><?php endif; ?>
 
-  <div class="stat-card">
-    <div class="stat-icon green"><i class="fas fa-users"></i></div>
-    <div class="stat-content">
-      <h3>45</h3>
-      <p>Total Meetings</p>
-    </div>
-  </div>
-
-  <div class="stat-card">
-    <div class="stat-icon orange"><i class="fas fa-clock"></i></div>
-    <div class="stat-content">
-      <h3>5</h3>
-      <p>Pending Approvals</p>
-    </div>
-  </div>
-</div>
-
-<!-- Filters -->
-<div class="filters">
-  <label for="filter-date">Date:</label>
-  <input type="date" id="filter-date" class="form-control">
-
-  <label for="filter-status">Status:</label>
-  <select id="filter-status" class="form-control">
-    <option value="">All</option>
-    <option value="scheduled">Scheduled</option>
-    <option value="completed">Completed</option>
-    <option value="cancelled">Cancelled</option>
-  </select>
-
-  <button class="btn btn-primary"><i class="fas fa-filter"></i> Apply Filter</button>
-</div>
-
-<!-- Tabs -->
-<div class="tabs">
-  <button class="tab-btn active" onclick="showTab('upcoming')">Upcoming</button>
-  <button class="tab-btn" onclick="showTab('completed')">Completed</button>
-  <button class="tab-btn" onclick="showTab('cancelled')">Cancelled</button>
-</div>
-
-<!-- Upcoming Meetings Table -->
-<div id="upcoming" class="tab-content active">
-  <div class="report-card">
-    <div class="card-header">
-      <div class="card-title"><i class="fas fa-calendar-day"></i> Upcoming Meetings</div>
-    </div>
+<div class="report-card">
+    <div class="card-header"><div class="card-title">All Meetings</div></div>
     <table class="report-table">
-      <thead>
-        <tr>
-          <th>Parent Name</th>
-          <th>Student</th>
-          <th>Date</th>
-          <th>Time</th>
-          <th>Status</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Mrs. Ali</td>
-          <td>Ayaan Ali</td>
-          <td>2025-10-15</td>
-          <td>10:00 AM</td>
-          <td><span class="badge badge-success">Confirmed</span></td>
-          <td><button class="btn btn-primary btn-sm"><i class="fas fa-edit"></i> Edit</button></td>
-        </tr>
-        <tr>
-          <td>Mr. Khan</td>
-          <td>Hina Khan</td>
-          <td>2025-10-16</td>
-          <td>11:30 AM</td>
-          <td><span class="badge badge-warning">Pending</span></td>
-          <td><button class="btn btn-primary btn-sm"><i class="fas fa-edit"></i> Edit</button></td>
-        </tr>
-      </tbody>
+        <thead><tr><th>Parent</th><th>Student</th><th>Date</th><th>Time</th><th>Status</th></tr></thead>
+        <tbody>
+            <?php if ($meetings): foreach ($meetings as $m): ?>
+            <tr>
+                <td><?= htmlspecialchars($m['parent_name']) ?></td>
+                <td><?= htmlspecialchars($m['student_name']) ?></td>
+                <td><?= htmlspecialchars($m['meeting_date']) ?></td>
+                <td><?= htmlspecialchars($m['meeting_time']) ?></td>
+                <td><span class="badge badge-<?= htmlspecialchars($m['status']) ?>"><?= ucfirst(htmlspecialchars($m['status'])) ?></span></td>
+            </tr>
+            <?php endforeach; else: ?>
+            <tr><td colspan="5" style="text-align:center;color:#888;">No meetings found</td></tr>
+            <?php endif; ?>
+        </tbody>
     </table>
-  </div>
 </div>
 
-<!-- Completed Meetings -->
-<div id="completed" class="tab-content">
-  <div class="report-card">
-    <div class="card-header">
-      <div class="card-title"><i class="fas fa-check-circle"></i> Completed Meetings</div>
+<!-- Modal for scheduling -->
+<div class="modal" id="modal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="document.getElementById('modal').style.display='none'">&times;</span>
+        <h3 style="margin-bottom:20px;color:#2c3e50;font-size:22px;text-align:center;">Schedule Meeting</h3>
+        <form method="post">
+            <label>Parent</label>
+            <select name="parent_name" required>
+                <option value="">Select Parent</option>
+                <?php foreach ($parents as $p): ?>
+                    <option value="<?= htmlspecialchars($p['email']) ?>"><?= htmlspecialchars($p['name']) ?> (<?= htmlspecialchars($p['email']) ?>)</option>
+                <?php endforeach; ?>
+            </select>
+
+            <label>Student</label>
+            <select name="student_name" required>
+                <option value="">Select Student</option>
+                <?php foreach ($students as $s): ?>
+                    <option value="<?= htmlspecialchars($s) ?>"><?= htmlspecialchars($s) ?></option>
+                <?php endforeach; ?>
+            </select>
+
+            <label>Date</label>
+            <input type="date" name="meeting_date" required>
+            <label>Time</label>
+            <input type="time" name="meeting_time" required>
+
+            <label>Status</label>
+            <select name="meeting_status">
+                <option value="scheduled">Scheduled</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+            </select>
+
+            <div style="text-align:center;margin-top:15px;">
+                <button type="submit" class="btn">Save</button>
+            </div>
+        </form>
     </div>
-    <table class="report-table">
-      <thead>
-        <tr>
-          <th>Parent Name</th>
-          <th>Student</th>
-          <th>Date</th>
-          <th>Time</th>
-          <th>Remarks</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Mrs. Ahmed</td>
-          <td>Bilal Ahmed</td>
-          <td>2025-10-10</td>
-          <td>9:30 AM</td>
-          <td>Excellent progress</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
 </div>
-
-<!-- Cancelled Meetings -->
-<div id="cancelled" class="tab-content">
-  <div class="report-card">
-    <div class="card-header">
-      <div class="card-title"><i class="fas fa-ban"></i> Cancelled Meetings</div>
-    </div>
-    <table class="report-table">
-      <thead>
-        <tr>
-          <th>Parent Name</th>
-          <th>Student</th>
-          <th>Date</th>
-          <th>Reason</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Mr. Farooq</td>
-          <td>Sana Farooq</td>
-          <td>2025-10-08</td>
-          <td>Parent unavailable</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<script>
-function showTab(tabId) {
-  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-  document.querySelector(`[onclick="showTab('${tabId}')"]`).classList.add('active');
-  document.getElementById(tabId).classList.add('active');
-}
-</script>
+</body>
+</html>
+<?php ob_end_flush(); ?>

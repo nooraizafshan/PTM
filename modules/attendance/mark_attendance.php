@@ -1,516 +1,233 @@
 <?php
-// Database connection (if needed)
-// include '../../config/db.php';
+// Include database connection
+require_once __DIR__ . '/../../config/db.php';
 
-// Sample class data (replace with database query)
-$students = [
-    ['id' => 1, 'roll_no' => 'STU001', 'name' => 'Ahmed Ali', 'class' => '5-A'],
-    ['id' => 2, 'roll_no' => 'STU002', 'name' => 'Fatima Khan', 'class' => '5-A'],
-    ['id' => 3, 'roll_no' => 'STU003', 'name' => 'Hassan Raza', 'class' => '5-A'],
-    ['id' => 4, 'roll_no' => 'STU004', 'name' => 'Ayesha Malik', 'class' => '5-A'],
-    ['id' => 5, 'roll_no' => 'STU005', 'name' => 'Bilal Ahmed', 'class' => '5-A'],
-    ['id' => 6, 'roll_no' => 'STU006', 'name' => 'Zainab Hassan', 'class' => '5-A'],
-    ['id' => 7, 'roll_no' => 'STU007', 'name' => 'Usman Khalid', 'class' => '5-A'],
-    ['id' => 8, 'roll_no' => 'STU008', 'name' => 'Maryam Ali', 'class' => '5-A'],
-];
+// Get connection
+$conn = dbConnect();
+if (!$conn) {
+    die("Database connection not available.");
+}
+
+// Get class and date from form or defaults
+$class_filter = $_POST['class'] ?? '5-A';
+$date = $_POST['date'] ?? date('Y-m-d');
 
 // Handle form submission
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    // Process attendance data
-    $attendance_data = $_POST['attendance'] ?? [];
-    $date = $_POST['date'] ?? date('Y-m-d');
-    
-    // Here you would save to database
-    // Example: INSERT INTO attendance (student_id, date, status) VALUES (?, ?, ?)
-    
-    $success = "Attendance marked successfully for " . count($attendance_data) . " students!";
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['attendance'])) {
+    $attendance_data = $_POST['attendance'];
+    $savedCount = 0;
+
+    foreach ($attendance_data as $student_id => $status) {
+        // Check if record exists
+        $check = $conn->prepare("SELECT attendance_id FROM attendance WHERE student_id=? AND attendance_date=?");
+        if ($check === false) die("Prepare failed (check attendance): " . $conn->error);
+        $check->bind_param("is", $student_id, $date);
+        $check->execute();
+        $result = $check->get_result();
+
+        if ($result->num_rows > 0) {
+            $stmt = $conn->prepare("UPDATE attendance SET status=? WHERE student_id=? AND attendance_date=?");
+            if ($stmt === false) die("Prepare failed (update attendance): " . $conn->error);
+            $stmt->bind_param("sis", $status, $student_id, $date);
+        } else {
+            $stmt = $conn->prepare("INSERT INTO attendance (student_id, attendance_date, status) VALUES (?, ?, ?)");
+            if ($stmt === false) die("Prepare failed (insert attendance): " . $conn->error);
+            $stmt->bind_param("iss", $student_id, $date, $status);
+        }
+
+        if ($stmt->execute()) $savedCount++;
+        $stmt->close();
+        $check->close();
+    }
+
+    $success = "Attendance saved successfully for $savedCount students!";
 }
+
+// Fetch students and their attendance for the selected date
+$students_stmt = $conn->prepare("
+    SELECT s.student_id, s.student_name, s.class, s.roll_number, a.status AS attendance_status
+    FROM students s
+    LEFT JOIN attendance a ON s.student_id = a.student_id AND a.attendance_date = ?
+    WHERE s.class = ?
+    ORDER BY s.roll_number ASC
+");
+if ($students_stmt === false) die("Prepare failed (fetch students): " . $conn->error);
+$students_stmt->bind_param("ss", $date, $class_filter);
+$students_stmt->execute();
+$result = $students_stmt->get_result();
+
+$students = [];
+while ($row = $result->fetch_assoc()) {
+    $students[] = $row;
+}
+$students_stmt->close();
 ?>
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mark Attendance</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 <style>
-    .page-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 24px;
-        padding-bottom: 16px;
-        border-bottom: 2px solid #e9ecef;
-    }
-
-    .page-title {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-    }
-
-    .page-title i {
-        width: 48px;
-        height: 48px;
-        background: linear-gradient(135deg, #4285f4, #34a853);
-        border-radius: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-size: 20px;
-    }
-
-    .page-title h2 {
-        font-size: 24px;
-        font-weight: 700;
-        color: #2c3e50;
-        margin-bottom: 4px;
-    }
-
-    .page-title p {
-        font-size: 14px;
-        color: #6c757d;
-    }
-
-    .attendance-card {
-        background: white;
-        border-radius: 12px;
-        border: 1px solid #e9ecef;
-        overflow: hidden;
-    }
-
-    .card-header {
-        padding: 20px 24px;
-        background: #f8f9fa;
-        border-bottom: 1px solid #e9ecef;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 16px;
-    }
-
-    .card-title {
-        font-size: 18px;
-        font-weight: 600;
-        color: #2c3e50;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-
-    .card-title i {
-        color: #4285f4;
-    }
-
-    .filter-controls {
-        display: flex;
-        gap: 12px;
-        align-items: center;
-    }
-
-    .form-control {
-        padding: 10px 16px;
-        border: 1px solid #dee2e6;
-        border-radius: 8px;
-        font-size: 14px;
-        background: white;
-    }
-
-    .form-control:focus {
-        outline: none;
-        border-color: #4285f4;
-        box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.1);
-    }
-
-    .btn {
-        padding: 10px 20px;
-        border: none;
-        border-radius: 8px;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-    }
-
-    .btn-primary {
-        background: linear-gradient(135deg, #4285f4, #34a853);
-        color: white;
-    }
-
-    .btn-primary:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(66, 133, 244, 0.3);
-    }
-
-    .btn-secondary {
-        background: #6c757d;
-        color: white;
-    }
-
-    .btn-secondary:hover {
-        background: #5a6268;
-    }
-
-    .attendance-table {
-        width: 100%;
-        border-collapse: collapse;
-    }
-
-    .attendance-table thead {
-        background: #f8f9fa;
-    }
-
-    .attendance-table th {
-        padding: 16px 24px;
-        text-align: left;
-        font-size: 12px;
-        font-weight: 600;
-        text-transform: uppercase;
-        color: #6c757d;
-        letter-spacing: 0.5px;
-        border-bottom: 2px solid #e9ecef;
-    }
-
-    .attendance-table td {
-        padding: 16px 24px;
-        border-bottom: 1px solid #f8f9fa;
-        font-size: 14px;
-        color: #2c3e50;
-    }
-
-    .attendance-table tbody tr:hover {
-        background: #f8f9fa;
-    }
-
-    .student-info {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-    }
-
-    .student-avatar {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #4285f4, #34a853);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-weight: 600;
-        font-size: 14px;
-    }
-
-    .student-details h4 {
-        font-size: 14px;
-        font-weight: 600;
-        color: #2c3e50;
-        margin-bottom: 2px;
-    }
-
-    .student-details p {
-        font-size: 12px;
-        color: #6c757d;
-    }
-
-    .attendance-toggle {
-        display: flex;
-        gap: 8px;
-    }
-
-    .toggle-btn {
-        width: 80px;
-        padding: 8px 16px;
-        border: 2px solid #e9ecef;
-        background: white;
-        border-radius: 6px;
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s;
-        text-align: center;
-    }
-
-    .toggle-btn:hover {
-        border-color: #dee2e6;
-        background: #f8f9fa;
-    }
-
-    .toggle-btn.active-present {
-        background: #d4edda;
-        border-color: #28a745;
-        color: #155724;
-    }
-
-    .toggle-btn.active-absent {
-        background: #f8d7da;
-        border-color: #dc3545;
-        color: #721c24;
-    }
-
-    .toggle-btn.active-leave {
-        background: #fff3cd;
-        border-color: #ffc107;
-        color: #856404;
-    }
-
-    .quick-actions {
-        padding: 20px 24px;
-        background: #f8f9fa;
-        border-top: 1px solid #e9ecef;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-
-    .summary {
-        display: flex;
-        gap: 24px;
-        font-size: 14px;
-    }
-
-    .summary-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-
-    .summary-item i {
-        font-size: 16px;
-    }
-
-    .summary-item.present { color: #28a745; }
-    .summary-item.absent { color: #dc3545; }
-    .summary-item.leave { color: #ffc107; }
-
-    .alert {
-        padding: 16px 20px;
-        border-radius: 8px;
-        margin-bottom: 20px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        font-size: 14px;
-    }
-
-    .alert-success {
-        background: #d4edda;
-        color: #155724;
-        border: 1px solid #c3e6cb;
-    }
-
-    @media (max-width: 768px) {
-        .page-header {
-            flex-direction: column;
-            align-items: flex-start;
-        }
-
-        .filter-controls {
-            width: 100%;
-            flex-direction: column;
-        }
-
-        .form-control {
-            width: 100%;
-        }
-
-        .attendance-toggle {
-            flex-direction: column;
-        }
-
-        .toggle-btn {
-            width: 100%;
-        }
-    }
+body { font-family: Arial, sans-serif; background:#f2f2f2; padding:20px; margin:0; }
+.page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
+.page-title { display:flex; align-items:center; gap:12px; }
+.page-title i { width:48px; height:48px; background:linear-gradient(135deg,#4285f4,#34a853); border-radius:12px; display:flex; align-items:center; justify-content:center; color:white; font-size:20px; }
+.page-title h2 { margin:0; font-size:24px; }
+.attendance-card { background:white; border-radius:12px; padding:20px; border:1px solid #e9ecef; }
+.card-header { display:flex; justify-content: space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
+.filter-controls { display:flex; gap:12px; }
+.form-control { padding:8px 12px; border-radius:6px; border:1px solid #ccc; font-size:14px; }
+table { width:100%; border-collapse: collapse; margin-top:10px; }
+th, td { padding:12px; border-bottom:1px solid #eee; text-align:left; font-size:14px; }
+th { background:#f8f9fa; font-weight:600; text-transform:uppercase; font-size:12px; }
+.student-info { display:flex; align-items:center; gap:12px; }
+.student-avatar { width:40px; height:40px; border-radius:50%; background:linear-gradient(135deg,#4285f4,#34a853); color:white; display:flex; justify-content:center; align-items:center; font-weight:600; }
+.attendance-toggle { display:flex; gap:6px; flex-wrap:wrap; }
+.toggle-btn { padding:6px 12px; border-radius:6px; border:1px solid #ccc; cursor:pointer; font-size:12px; transition:0.2s; background:white; }
+.toggle-btn.active-present { background:#d4edda; border-color:#28a745; color:#155724; }
+.toggle-btn.active-absent { background:#f8d7da; border-color:#dc3545; color:#721c24; }
+.toggle-btn.active-leave { background:#fff3cd; border-color:#ffc107; color:#856404; }
+.quick-actions { display:flex; justify-content:space-between; margin-top:20px; align-items:center; flex-wrap:wrap; gap:12px; }
+.summary { display:flex; gap:16px; }
+.summary-item { display:flex; align-items:center; gap:6px; font-size:14px; }
+.summary-item.present { color:#28a745; }
+.summary-item.absent { color:#dc3545; }
+.summary-item.leave { color:#ffc107; }
+.alert { padding:12px 16px; border-radius:6px; margin-bottom:20px; }
+.alert-success { background:#d4edda; color:#155724; border:1px solid #c3e6cb; }
+button.btn-primary { background:#4285f4; color:white; padding:8px 16px; border:none; border-radius:6px; cursor:pointer; }
+button.btn-secondary { background:#6c757d; color:white; padding:8px 16px; border:none; border-radius:6px; cursor:pointer; }
+@media(max-width:768px){ .attendance-toggle { flex-direction:column; } table, th, td { font-size:12px; } }
 </style>
+</head>
+<body>
 
 <?php if (isset($success)): ?>
-    <div class="alert alert-success">
-        <i class="fas fa-check-circle"></i>
-        <span><?php echo $success; ?></span>
-    </div>
+<div class="alert alert-success">
+    <i class="fas fa-check-circle"></i> <?php echo $success; ?>
+</div>
 <?php endif; ?>
 
 <div class="page-header">
-    <div class="page-title">
-        <i class="fas fa-calendar-check"></i>
-        <div>
-            <h2>Mark Attendance</h2>
-            <p>Record daily student attendance</p>
-        </div>
-    </div>
+<div class="page-title">
+<i class="fas fa-calendar-check"></i>
+<div>
+<h2>Mark Attendance</h2>
+<p>Record daily student attendance</p>
+</div>
+</div>
 </div>
 
 <form method="POST" id="attendanceForm">
-    <div class="attendance-card">
-        <div class="card-header">
-            <h3 class="card-title">
-                <i class="fas fa-users"></i>
-                Class 5-A Students
-            </h3>
-            <div class="filter-controls">
-                <input type="date" 
-                       name="date" 
-                       class="form-control" 
-                       value="<?php echo date('Y-m-d'); ?>"
-                       required>
-                <select class="form-control" name="class">
-                    <option value="5-A">Class 5-A</option>
-                    <option value="5-B">Class 5-B</option>
-                    <option value="5-C">Class 5-C</option>
-                </select>
-            </div>
-        </div>
+<div class="attendance-card">
+<div class="card-header">
+<div class="filter-controls">
+<input type="date" name="date" class="form-control" value="<?php echo $date; ?>" required>
+<select name="class" class="form-control" onchange="this.form.submit()">
+<option value="5-A" <?php if($class_filter=='5-A') echo 'selected'; ?>>5-A</option>
+<option value="5-B" <?php if($class_filter=='5-B') echo 'selected'; ?>>5-B</option>
+<option value="5-C" <?php if($class_filter=='5-C') echo 'selected'; ?>>5-C</option>
+</select>
+</div>
+</div>
 
-        <table class="attendance-table">
-            <thead>
-                <tr>
-                    <th>Roll No</th>
-                    <th>Student Name</th>
-                    <th>Class</th>
-                    <th style="text-align: center;">Attendance Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($students as $student): 
-                    $initials = strtoupper(substr($student['name'], 0, 2));
-                ?>
-                <tr>
-                    <td><strong><?php echo $student['roll_no']; ?></strong></td>
-                    <td>
-                        <div class="student-info">
-                            <div class="student-avatar"><?php echo $initials; ?></div>
-                            <div class="student-details">
-                                <h4><?php echo $student['name']; ?></h4>
-                                <p>Student ID: <?php echo $student['roll_no']; ?></p>
-                            </div>
-                        </div>
-                    </td>
-                    <td><?php echo $student['class']; ?></td>
-                    <td>
-                        <div class="attendance-toggle">
-                            <input type="hidden" name="student_ids[]" value="<?php echo $student['id']; ?>">
-                            <button type="button" 
-                                    class="toggle-btn" 
-                                    data-status="present"
-                                    onclick="setAttendance(this, <?php echo $student['id']; ?>, 'present')">
-                                <i class="fas fa-check"></i> Present
-                            </button>
-                            <button type="button" 
-                                    class="toggle-btn" 
-                                    data-status="absent"
-                                    onclick="setAttendance(this, <?php echo $student['id']; ?>, 'absent')">
-                                <i class="fas fa-times"></i> Absent
-                            </button>
-                            <button type="button" 
-                                    class="toggle-btn" 
-                                    data-status="leave"
-                                    onclick="setAttendance(this, <?php echo $student['id']; ?>, 'leave')">
-                                <i class="fas fa-calendar-times"></i> Leave
-                            </button>
-                            <input type="hidden" 
-                                   name="attendance[<?php echo $student['id']; ?>]" 
-                                   id="status_<?php echo $student['id']; ?>" 
-                                   value="">
-                        </div>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
+<table>
+<thead>
+<tr>
+<th>Roll No</th>
+<th>Student Name</th>
+<th>Class</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<?php foreach($students as $student):
+$status = $student['attendance_status'] ?? '';
+?>
+<tr>
+<td><?php echo $student['roll_number']; ?></td>
+<td><?php echo $student['student_name']; ?></td>
+<td><?php echo $student['class']; ?></td>
+<td>
+<div class="attendance-toggle">
+<input type="hidden" name="attendance[<?php echo $student['student_id']; ?>]" id="status_<?php echo $student['student_id']; ?>" value="<?php echo $status; ?>">
+<button type="button" class="toggle-btn" data-status="present" onclick="setAttendance(this, <?php echo $student['student_id']; ?>, 'present')">Present</button>
+<button type="button" class="toggle-btn" data-status="absent" onclick="setAttendance(this, <?php echo $student['student_id']; ?>, 'absent')">Absent</button>
+<button type="button" class="toggle-btn" data-status="leave" onclick="setAttendance(this, <?php echo $student['student_id']; ?>, 'leave')">Leave</button>
+</div>
+</td>
+</tr>
+<?php endforeach; ?>
+</tbody>
+</table>
 
-        <div class="quick-actions">
-            <div class="summary">
-                <div class="summary-item present">
-                    <i class="fas fa-check-circle"></i>
-                    <span>Present: <strong id="presentCount">0</strong></span>
-                </div>
-                <div class="summary-item absent">
-                    <i class="fas fa-times-circle"></i>
-                    <span>Absent: <strong id="absentCount">0</strong></span>
-                </div>
-                <div class="summary-item leave">
-                    <i class="fas fa-calendar-times"></i>
-                    <span>Leave: <strong id="leaveCount">0</strong></span>
-                </div>
-            </div>
-            <div style="display: flex; gap: 12px;">
-                <button type="button" class="btn btn-secondary" onclick="resetForm()">
-                    <i class="fas fa-redo"></i> Reset
-                </button>
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save"></i> Save Attendance
-                </button>
-            </div>
-        </div>
-    </div>
+<div class="quick-actions">
+<div class="summary">
+<div class="summary-item present"><i class="fas fa-check-circle"></i> Present: <strong id="presentCount">0</strong></div>
+<div class="summary-item absent"><i class="fas fa-times-circle"></i> Absent: <strong id="absentCount">0</strong></div>
+<div class="summary-item leave"><i class="fas fa-exclamation-circle"></i> Leave: <strong id="leaveCount">0</strong></div>
+</div>
+<div style="display:flex; gap:8px; flex-wrap:wrap;">
+<button type="button" class="btn-secondary" onclick="resetForm()">Reset</button>
+<button type="submit" class="btn-primary">Save Attendance</button>
+</div>
+</div>
+</div>
 </form>
 
 <script>
-function setAttendance(button, studentId, status) {
-    // Remove active class from all buttons in the row
-    const row = button.closest('tr');
-    const buttons = row.querySelectorAll('.toggle-btn');
-    buttons.forEach(btn => {
-        btn.classList.remove('active-present', 'active-absent', 'active-leave');
+function setAttendance(btn, id, status){
+    document.getElementById('status_'+id).value = status;
+    btn.closest('tr').querySelectorAll('button').forEach(b=>{
+        b.classList.remove('active-present','active-absent','active-leave');
     });
-    
-    // Add active class to clicked button
-    button.classList.add('active-' + status);
-    
-    // Set hidden input value
-    document.getElementById('status_' + studentId).value = status;
-    
-    // Update summary counts
+    btn.classList.add('active-'+status);
     updateSummary();
 }
 
-function updateSummary() {
-    const presentCount = document.querySelectorAll('.active-present').length;
-    const absentCount = document.querySelectorAll('.active-absent').length;
-    const leaveCount = document.querySelectorAll('.active-leave').length;
-    
-    document.getElementById('presentCount').textContent = presentCount;
-    document.getElementById('absentCount').textContent = absentCount;
-    document.getElementById('leaveCount').textContent = leaveCount;
+function updateSummary(){
+    document.getElementById('presentCount').textContent=document.querySelectorAll('.active-present').length;
+    document.getElementById('absentCount').textContent=document.querySelectorAll('.active-absent').length;
+    document.getElementById('leaveCount').textContent=document.querySelectorAll('.active-leave').length;
 }
 
-function resetForm() {
-    const buttons = document.querySelectorAll('.toggle-btn');
-    buttons.forEach(btn => {
-        btn.classList.remove('active-present', 'active-absent', 'active-leave');
-    });
-    
-    const hiddenInputs = document.querySelectorAll('[id^="status_"]');
-    hiddenInputs.forEach(input => {
-        input.value = '';
-    });
-    
+function resetForm(){
+    document.querySelectorAll('.attendance-toggle button').forEach(b=>b.classList.remove('active-present','active-absent','active-leave'));
+    document.querySelectorAll('[id^="status_"]').forEach(i=>i.value='');
     updateSummary();
 }
 
-// Form validation
-document.getElementById('attendanceForm').addEventListener('submit', function(e) {
-    const attendanceInputs = document.querySelectorAll('[id^="status_"]');
-    let allMarked = true;
-    
-    attendanceInputs.forEach(input => {
-        if (!input.value) {
-            allMarked = false;
+// Sync saved attendance with buttons on load
+function syncButtons(){
+    document.querySelectorAll('.attendance-toggle').forEach(div=>{
+        const hiddenInput = div.querySelector('input[type=hidden]');
+        const value = hiddenInput.value;
+        if(value){
+            const btn = div.querySelector(`button[data-status="${value}"]`);
+            if(btn) btn.classList.add('active-'+value);
         }
     });
-    
-    if (!allMarked) {
+    updateSummary();
+}
+
+// Validate before submit
+document.getElementById('attendanceForm').addEventListener('submit', function(e){
+    let incomplete = false;
+    document.querySelectorAll('[id^="status_"]').forEach(i=>{
+        if(!i.value) incomplete = true;
+    });
+    if(incomplete){
         e.preventDefault();
-        alert('Please mark attendance for all students before submitting!');
+        alert('Please mark attendance for all students!');
         return false;
     }
-    
-    return confirm('Are you sure you want to save this attendance record?');
+    return confirm('Are you sure you want to save attendance?');
 });
 
-// Auto-mark all as present (optional quick action)
-function markAllPresent() {
-    const buttons = document.querySelectorAll('.toggle-btn[data-status="present"]');
-    buttons.forEach(btn => btn.click());
-}
+window.onload = syncButtons;
 </script>
+
+</body>
+</html>

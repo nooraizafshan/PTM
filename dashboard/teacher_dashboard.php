@@ -15,9 +15,8 @@ $page = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
 
 // ✅ Page mapping (make sure file paths are correct)
 $pages = [
-    'dashboard' => 'dashboard/teacher_dashboard.php',
+   'dashboard' => 'modules/teacher/dashboard.php',
     'mark-attendance' => 'modules/attendance/mark_attendance.php',
-    
     'generate-progress' => 'modules/progress/generate_progress.php', // ✅ alias added
     'meetings' => 'modules/meetings/schedule_meeting.php',
     'feedback' => 'modules/feedback/feedback.php',
